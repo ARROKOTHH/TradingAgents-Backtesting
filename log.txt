@@ -1,0 +1,966 @@
+第一步: 选择并解析分析报告
+选择一份分析报告以生成策略：
+
+600111_analysis_20250914_185349_strategy_guided.md
+AI分析师的报告摘要:
+新闻标题: 发布时间: 2025-09-14
+
+发布时间: 2025-09-14
+
+好的，作为一位顶级的量化策略设计师，我将严格遵循您的【核心指令】和【重要约束条件】，仅基于报告中的【原始分析模块】来构建一个结构清晰、逻辑严谨的backtrader交易策略蓝图。
+
+backtrader 交易策略蓝图: 北方稀土 (600111) 趋势跟踪策略
+1. 策略画像
+策略风格: 趋势跟踪与回调买入 (Trend-Following with Pullback Entry)
+
+理由:
+宏观趋势确认: 【投资决策摘要】、【基本面分析】和【新闻事件分析】共同描绘了一个由行业需求（新能源汽车）和国家政策驱动的长期积极前景。这为趋势跟踪策略提供了坚实的基本面基础。
+技术形态支持: 【市场技术分析】明确指出股票处于“显著的上涨趋势”中，这是趋势跟踪策略的必要前提。
+回调入场时机: 技术分析同时强调了短期回调风险（MACD柱状图为负，RSI处于高位），这表明盲目追高并非最优选择。因此，结合回调信号入场，可以在确认主趋势的同时，寻求一个风险收益比更佳的切入点。
+风险偏好: 中等 (Moderate)
+
+理由:
+顺势而为: 策略的核心是顺应已形成的强势趋势，而非逆势博弈，这本身降低了与市场主要力量对抗的风险。
+风险控制机制: 策略并非激进地追逐每一个突破，而是等待市场短期回调、风险释放后再入场。同时，集成了基于ATR的动态止损和固定风险的仓位管理，构成了完整的风险控制闭环，将单笔交易的潜在损失限制在可控范围内。
+2. 核心参数 (Parameters)
+# Fictional backtrader parameter definition
+params = (
+    # 趋势过滤器参数
+    ('p_trend_period', 50),  # 长期趋势均线周期 (EMA)
+
+    # 入场信号参数 (Plan A)
+    ('p_macd_fast', 12),     # MACD快线周期
+    ('p_macd_slow', 26),     # MACD慢线周期
+    ('p_macd_signal', 9),      # MACD信号线周期
+    ('p_rsi_period', 14),      # RSI周期
+    ('p_rsi_floor', 40.0),     # RSI回调的最低支撑位
+
+    # 入场信号参数 (Plan B)
+    ('p_pullback_ema', 20),  # 回调参考的短期均线周期
+
+    # 出场逻辑参数
+    ('p_atr_period', 14),      # ATR周期，用于计算止损
+    ('p_atr_multiplier', 2.5), # ATR乘数，决定止损距离
+
+    # 风险管理参数
+    ('p_risk_percent', 0.02),  # 每笔交易承担的账户风险百分比 (2%)
+)
+
+3. 量化趋势过滤器 (Trend Filter)
+该过滤器用于确保我们只在市场处于明确的上升趋势时才考虑开仓做多，以过滤掉主要的下跌和震荡行情。
+
+规则 1: 价格趋势确认: 当前收盘价必须高于其长周期指数移动平均线（EMA）。
+
+代码逻辑: self.data.close[0] > self.ema_trend[0]
+解释: 这是判断市场牛熊的最常用方法之一。价格在长期均线上方，表明市场多头力量占据主导地位。
+规则 2: 均线方向确认: 长周期EMA本身必须处于上升状态。
+
+代码逻辑: self.ema_trend[0] > self.ema_trend[-1]
+解释: 此规则能有效过滤掉价格围绕一条走平的均线反复波动的“假趋势”或震荡市，增加了趋势的可靠性。
+4. 量化入场信号 (Entry Signal)
+在趋势过滤器确认为“上升趋势”的前提下，执行以下入场规则。
+
+主要规则 (Plan A): MACD动能反转信号
+
+逻辑: 捕捉在主升趋势中的健康回调结束，短期动能重新与长期趋势对齐的时刻。
+规则组合:
+趋势确认: 满足上述【量化趋势过滤器】的所有规则。
+回调结束: MACD柱状图（histo）从负值上穿到正值。这表明短期下跌或盘整的动能已经衰竭，多头动能开始回归。
+代码逻辑: self.macd.histo[0] > 0 and self.macd.histo[-1] <= 0
+强度确认: 在触发信号当天，RSI值必须大于p_rsi_floor（例如40）。
+代码逻辑: self.rsi[0] > self.p.p_rsi_floor
+解释: 此规则用于过滤掉那些过于深度、可能导致趋势反转的弱势回调。我们希望看到的是强势整理后的再度上攻，而非泥沙俱下的崩盘式回调。
+备用规则 (Plan B): 动态支撑位反弹信号
+
+逻辑: 当Plan A的动能信号不明确时，此规则用于捕捉价格回调至短期动态支撑位（如20周期EMA）并获得支撑反弹的经典技术形态。
+规则组合:
+趋势确认: 满足上述【量化趋势过滤器】的所有规则。
+回调触及支撑: 当日最低价曾一度跌破短期EMA（p_pullback_ema），但收盘价最终收回在该均线上方。
+代码逻辑: self.data.low[0] < self.ema_pullback[0] and self.data.close[0] > self.ema_pullback[0]
+解释: 这个“下影线”形态清晰地表明，在回调过程中多头在关键的动态支撑位进行了有效抵抗，空头力量衰竭，是潜在的买入时机。
+5. 量化出场逻辑 (Exit Logic)
+止盈/止损规则: 基于ATR的追踪止损 (ATR Trailing Stop)
+逻辑: 该机制旨在保护利润并让其奔跑，同时在趋势发生明确反转时及时退出。它比固定止损更优，因为它能根据市场的波动性动态调整止损距离。
+执行步骤:
+初始止损: 在入场时，计算当时的ATR值。初始止损价位设定为：入场价 - p_atr_multiplier * ATR值。
+追踪止损: 在持仓期间，每个交易日重新计算一个新的潜在止损位：当日收盘价 - p_atr_multiplier * ATR值。
+更新规则: 如果新的潜在止损位 高于 当前的追踪止损位，则将追踪止损位上调至这个新位置。追踪止损位只上调，不下调。
+触发退出: 如果某日的最低价触及或跌破了当前的追踪止损位，立即平仓。
+6. 量化风险管理 (Risk Management)
+仓位规模: 固定风险百分比模型 (Fixed Percentage Risk Model)
+逻辑: 确保任何单笔交易的失败都不会对总资本造成毁灭性打击。无论股价高低、波动大小，每笔交易的预期最大亏损都恒定为总资产的一个固定百分比。
+计算公式:
+确定单笔风险金额: Risk_Amount = Portfolio_Value * p_risk_percent
+确定每股风险: Risk_Per_Share = Entry_Price - Initial_Stop_Loss_Price (初始止损价由ATR规则在入场时确定)
+计算仓位规模 (股数): Position_Size = Risk_Amount / Risk_Per_Share
+解释: 这种方法将仓位大小与股票自身的波动性（通过ATR止损反映）和您的风险偏好直接挂钩，是专业量化交易中进行风险管理的核心标准。
+
+
+第二步: 生成策略代码 (AI自我修正)
+AI生成的最终代码:
+import backtrader as bt
+import math
+
+class CustomStrategy(bt.Strategy):
+    """
+    策略摘要:
+    {st.session_state.report_summary}
+    
+    该策略结合相对强弱指数(RSI)和移动平均收敛散度(MACD)指标，旨在捕捉超卖后的趋势反转机会。
+    - 入场信号: 采用两步确认法。首先，等待RSI进入超卖区，表明市场可能回调过度。一旦此条件满足，策略将进入“等待确认”状态。随后，如果MACD指标发生金叉（MACD线上穿信号线），则视为趋势反转的确认信号，执行买入。
+    - 出场信号: 包含三种情况：
+        1. 止盈: 价格达到预设的止盈目标。
+        2. 止损: 价格跌至预设的止损位。
+        3. RSI超买: RSI指标进入超买区，预示上涨动能可能衰竭，主动平仓。
+    - 风险偏好: 策略参数（如RSI阈值、MACD周期、止盈止损比例）会根据最终风险偏好（保守型、中等型、激进型）进行动态调整。
+    """
+
+    # 默认参数（对应“中等型”风险偏好）
+    params = (
+        ('risk_appetite', '中等型'),  # 将被 __init__ 中的动态设置覆盖
+        ('rsi_period', 14),
+        ('rsi_oversold', 30),
+        ('rsi_overbought', 70),
+        ('macd_fast', 12),
+        ('macd_slow', 26),
+        ('macd_signal', 9),
+        ('stop_loss', 0.07),      # 7% 止损
+        ('take_profit', 0.15),    # 15% 止盈
+        ('sizing_pct', 0.95),     # 使用95%的现金进行交易
+    )
+
+    def __init__(self):
+        # --- 1. 根据最终风险偏好动态调整参数 (必须在__init__方法的最开始) ---
+        self.p.risk_appetite = "{st.session_state.final_risk_appetite}"
+
+        if self.p.risk_appetite == '激进型':
+            self.p.rsi_oversold = 35
+            self.p.rsi_overbought = 65
+            self.p.macd_fast = 8
+            self.p.macd_slow = 18
+            self.p.stop_loss = 0.10      # 更宽的止损以承受更大波动
+            self.p.take_profit = 0.10    # 更紧的止盈以快速获利
+        elif self.p.risk_appetite == '保守型':
+            self.p.rsi_oversold = 25
+            self.p.rsi_overbought = 75
+            self.p.macd_fast = 15
+            self.p.macd_slow = 30
+            self.p.stop_loss = 0.05      # 更紧的止损以控制风险
+            self.p.take_profit = 0.20    # 更宽的止盈以捕捉长期趋势
+
+        # --- 2. 初始化策略变量和数据引用 ---
+        self.dataclose = self.datas[0].close
+        self.daily_values = []
+        self.order = None
+        self.buyprice = None
+        self.buycomm = None
+        
+        # 状态管理变量，用于实现“先...后...”的多步逻辑
+        self.oversold_signal_active = False
+
+        # --- 3. 初始化指标 ---
+        self.rsi = bt.indicators.RSI(self.datas[0], period=self.p.rsi_period)
+        self.macd = bt.indicators.MACD(
+            self.datas[0],
+            period_me1=self.p.macd_fast,
+            period_me2=self.p.macd_slow,
+            period_signal=self.p.macd_signal
+        )
+        # 使用CrossOver指标清晰地捕捉金叉信号 (返回+1.0) 和死叉信号 (返回-1.0)
+        self.macd_crossover = bt.indicators.CrossOver(self.macd.lines.macd, self.macd.lines.signal)
+
+    def log(self, txt, dt=None):
+        """ 策略日志记录函数 """
+        dt = dt or self.datas[0].datetime.date(0)
+        print(f'{dt.isoformat()} | {txt}')
+
+    def notify_order(self, order):
+        if order.status in [order.Submitted, order.Accepted]:
+            return
+
+        if order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(f'BUY EXECUTED, Price: {order.executed.price:.2f}, Cost: {order.executed.value:.2f}, Comm: {order.executed.comm:.2f}')
+                self.buyprice = order.executed.price
+                self.buycomm = order.executed.comm
+            elif order.issell():
+                self.log(f'SELL EXECUTED, Price: {order.executed.price:.2f}, Cost: {order.executed.value:.2f}, Comm: {order.executed.comm:.2f}')
+            self.bar_executed = len(self)
+        elif order.status in [order.Canceled, order.Margin, order.Rejected]:
+            self.log('Order Canceled/Margin/Rejected')
+
+        self.order = None
+
+    def notify_trade(self, trade):
+        if not trade.isclosed:
+            return
+        self.log(f'OPERATION PROFIT, GROSS {trade.pnl:.2f}, NET {trade.pnlcomm:.2f}')
+
+    def next(self):
+        # --- 核心准则：诊断日志 (每日关键指标) ---
+        current_date = self.datas[0].datetime.date(0)
+        log_msg = (
+            f"Date: {current_date}, Close: {self.dataclose[0]:.2f}, "
+            f"RSI: {self.rsi[0]:.2f}, MACD: {self.macd.lines.macd[0]:.2f}, "
+            f"Signal: {self.macd.lines.signal[0]:.2f}, "
+            f"Crossover: {self.macd_crossover[0]:.2f}, "
+            f"Oversold Signal Active: {self.oversold_signal_active}"
+        )
+        print(log_msg)
+
+        if self.order:
+            return
+
+        # --- 入场逻辑 ---
+        if not self.position:
+            # 步骤 1: 检查RSI是否进入超卖区，以激活“等待确认”状态
+            if self.rsi[0] < self.p.rsi_oversold:
+                self.oversold_signal_active = True
+                print(f"Date: {current_date} - Oversold condition met (RSI < {self.p.rsi_oversold}). Waiting for MACD confirmation.")
+
+            # 步骤 2: 如果“等待确认”状态已激活，则寻找MACD金叉作为买入信号
+            # self.macd_crossover[0] > 0 表示当前K线发生金叉
+            buy_condition = self.oversold_signal_active and self.macd_crossover[0] > 0
+
+            # --- 核心准则：诊断日志 (入场条件判断) ---
+            print(f"Date: {current_date} - Evaluating Buy. Buy Condition Met: {buy_condition}")
+
+            if buy_condition:
+                self.log(f'BUY CREATE, Close: {self.dataclose[0]:.2f}')
+                # 计算下单手数
+                cash = self.broker.get_cash()
+                size = (cash * self.p.sizing_pct) / self.dataclose[0]
+                size = math.floor(size) # 取整
+                self.order = self.buy(size=size)
+                # 下单后重置状态，避免连续下单
+                self.oversold_signal_active = False
+        
+        # --- 出场逻辑 ---
+        else:
+            # 条件 1: RSI进入超买区
+            exit_by_rsi = self.rsi[0] > self.p.rsi_overbought
+            # 条件 2: 触发止损
+            exit_by_sl = self.dataclose[0] < self.buyprice * (1.0 - self.p.stop_loss)
+            # 条件 3: 触发止盈
+            exit_by_tp = self.dataclose[0] > self.buyprice * (1.0 + self.p.take_profit)
+
+            if exit_by_rsi:
+                self.log(f'SELL CREATE (RSI Overbought), Close: {self.dataclose[0]:.2f}')
+                self.order = self.close()
+                # 交易结束后重置状态
+                self.oversold_signal_active = False
+            elif exit_by_sl:
+                self.log(f'SELL CREATE (Stop Loss), Close: {self.dataclose[0]:.2f}')
+                self.order = self.close()
+                self.oversold_signal_active = False
+            elif exit_by_tp:
+                self.log(f'SELL CREATE (Take Profit), Close: {self.dataclose[0]:.2f}')
+                self.order = self.close()
+                self.oversold_signal_active = False
+
+        # --- 核心指令：记录每日市值 ---
+        self.daily_values.append(self.broker.getvalue())
+
+
+
+2025-09-14 19:02:11,997 | web                  | INFO | 📊 [配置恢复] 表单配置已恢复
+A股数据列名: ['日期', '股票代码', '开盘', '收盘', '最高', '最低', '成交量', '成交额', '振幅', '涨跌幅', '涨跌额', '换手 率']
+成功将每日股价数据记录到 daily_prices.log
+尝试加载策略文件: K:\Git\Tradingagents-Backtesitng V0.1.1\Strategy\strategy_{stock_symbol}_{timestamp}.py
+成功加载自定义策略: CustomStrategy
+Date: 2024-02-27, Close: 18.59, RSI: 55.13, MACD: 0.08, Signal: -0.15, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-02-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-02-28, Close: 18.35, RSI: 52.10, MACD: 0.09, Signal: -0.10, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-02-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-02-29, Close: 18.75, RSI: 56.41, MACD: 0.13, Signal: -0.05, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-02-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-01, Close: 18.97, RSI: 58.61, MACD: 0.18, Signal: -0.01, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-01 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-04, Close: 18.82, RSI: 56.51, MACD: 0.20, Signal: 0.03, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-04 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-05, Close: 19.04, RSI: 58.84, MACD: 0.23, Signal: 0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-05 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-06, Close: 18.80, RSI: 55.36, MACD: 0.24, Signal: 0.11, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-07, Close: 19.49, RSI: 62.27, MACD: 0.29, Signal: 0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-07 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-08, Close: 19.41, RSI: 61.09, MACD: 0.32, Signal: 0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-11, Close: 19.71, RSI: 63.86, MACD: 0.37, Signal: 0.22, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-12, Close: 19.58, RSI: 61.81, MACD: 0.39, Signal: 0.25, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-12 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-13, Close: 19.48, RSI: 60.21, MACD: 0.40, Signal: 0.28, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-13 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-14, Close: 19.38, RSI: 58.57, MACD: 0.39, Signal: 0.30, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-14 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-15, Close: 19.80, RSI: 63.11, MACD: 0.41, Signal: 0.32, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-15 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-18, Close: 19.99, RSI: 64.97, MACD: 0.44, Signal: 0.35, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-19, Close: 20.41, RSI: 68.74, MACD: 0.49, Signal: 0.38, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-19 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-20, Close: 20.29, RSI: 66.54, MACD: 0.51, Signal: 0.40, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-20 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-21, Close: 20.16, RSI: 64.14, MACD: 0.52, Signal: 0.43, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-21 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-22, Close: 19.57, RSI: 54.54, MACD: 0.46, Signal: 0.43, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-22 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-25, Close: 19.42, RSI: 52.39, MACD: 0.41, Signal: 0.43, Crossover: -1.00, Oversold Signal Active: False
+Date: 2024-03-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-26, Close: 19.11, RSI: 48.17, MACD: 0.33, Signal: 0.41, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-27, Close: 18.63, RSI: 42.46, MACD: 0.23, Signal: 0.37, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-28, Close: 18.99, RSI: 47.49, MACD: 0.18, Signal: 0.34, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-03-29, Close: 19.27, RSI: 51.07, MACD: 0.16, Signal: 0.30, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-03-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-01, Close: 19.83, RSI: 57.33, MACD: 0.19, Signal: 0.28, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-01 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-02, Close: 20.05, RSI: 59.52, MACD: 0.22, Signal: 0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-02 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-03, Close: 20.69, RSI: 65.13, MACD: 0.30, Signal: 0.27, Crossover: 1.00, Oversold Signal Active: False
+Date: 2024-04-03 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-08, Close: 20.61, RSI: 63.94, MACD: 0.35, Signal: 0.29, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-09, Close: 21.50, RSI: 70.43, MACD: 0.46, Signal: 0.32, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-10, Close: 20.60, RSI: 58.89, MACD: 0.46, Signal: 0.35, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-11, Close: 20.31, RSI: 55.72, MACD: 0.44, Signal: 0.37, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-12, Close: 20.07, RSI: 53.17, MACD: 0.40, Signal: 0.37, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-12 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-15, Close: 20.19, RSI: 54.30, MACD: 0.37, Signal: 0.37, Crossover: -1.00, Oversold Signal Active: False
+Date: 2024-04-15 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-16, Close: 19.78, RSI: 49.88, MACD: 0.31, Signal: 0.36, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-16 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-17, Close: 20.30, RSI: 54.89, MACD: 0.30, Signal: 0.35, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-17 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-18, Close: 20.16, RSI: 53.34, MACD: 0.28, Signal: 0.34, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-19, Close: 19.89, RSI: 50.40, MACD: 0.24, Signal: 0.32, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-19 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-22, Close: 19.81, RSI: 49.52, MACD: 0.20, Signal: 0.29, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-22 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-23, Close: 18.95, RSI: 41.25, MACD: 0.09, Signal: 0.25, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-23 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-24, Close: 19.44, RSI: 46.71, MACD: 0.05, Signal: 0.21, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-24 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-25, Close: 19.53, RSI: 47.67, MACD: 0.02, Signal: 0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-26, Close: 19.78, RSI: 50.36, MACD: 0.02, Signal: 0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-29, Close: 19.78, RSI: 50.36, MACD: 0.02, Signal: 0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-04-30, Close: 19.20, RSI: 44.25, MACD: -0.03, Signal: 0.09, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-04-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-06, Close: 19.57, RSI: 48.54, MACD: -0.03, Signal: 0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-07, Close: 20.19, RSI: 54.81, MACD: 0.01, Signal: 0.06, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-07 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-08, Close: 20.13, RSI: 54.12, MACD: 0.04, Signal: 0.05, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-09, Close: 20.54, RSI: 57.99, MACD: 0.10, Signal: 0.06, Crossover: 1.00, Oversold Signal Active: False
+Date: 2024-05-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-10, Close: 20.37, RSI: 55.89, MACD: 0.12, Signal: 0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-13, Close: 20.08, RSI: 52.39, MACD: 0.12, Signal: 0.08, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-13 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-14, Close: 20.06, RSI: 52.15, MACD: 0.12, Signal: 0.09, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-14 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-15, Close: 19.70, RSI: 47.86, MACD: 0.08, Signal: 0.09, Crossover: -1.00, Oversold Signal Active: False
+Date: 2024-05-15 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-16, Close: 19.65, RSI: 47.27, MACD: 0.05, Signal: 0.08, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-16 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-17, Close: 19.89, RSI: 50.39, MACD: 0.05, Signal: 0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-17 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-20, Close: 20.29, RSI: 55.15, MACD: 0.07, Signal: 0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-20 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-21, Close: 19.86, RSI: 49.64, MACD: 0.06, Signal: 0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-21 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-22, Close: 19.87, RSI: 49.76, MACD: 0.05, Signal: 0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-22 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-23, Close: 19.19, RSI: 42.07, MACD: -0.02, Signal: 0.05, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-23 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-24, Close: 19.05, RSI: 40.67, MACD: -0.08, Signal: 0.02, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-24 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-27, Close: 19.03, RSI: 40.47, MACD: -0.12, Signal: -0.00, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-28, Close: 18.96, RSI: 39.71, MACD: -0.17, Signal: -0.04, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-29, Close: 19.29, RSI: 44.95, MACD: -0.17, Signal: -0.06, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-30, Close: 18.95, RSI: 41.00, MACD: -0.20, Signal: -0.09, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-05-31, Close: 18.80, RSI: 39.35, MACD: -0.23, Signal: -0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-05-31 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-03, Close: 18.30, RSI: 34.39, MACD: -0.29, Signal: -0.15, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-03 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-04, Close: 18.33, RSI: 34.92, MACD: -0.34, Signal: -0.19, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-04 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-05, Close: 18.24, RSI: 34.04, MACD: -0.38, Signal: -0.23, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-05 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-06, Close: 18.02, RSI: 31.90, MACD: -0.42, Signal: -0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-07, Close: 18.09, RSI: 33.33, MACD: -0.44, Signal: -0.30, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-07 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-11, Close: 18.06, RSI: 33.01, MACD: -0.46, Signal: -0.33, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-12, Close: 18.10, RSI: 33.93, MACD: -0.46, Signal: -0.36, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-12 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-13, Close: 17.90, RSI: 31.61, MACD: -0.47, Signal: -0.38, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-13 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-14, Close: 17.87, RSI: 31.26, MACD: -0.48, Signal: -0.40, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-14 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-17, Close: 17.77, RSI: 30.08, MACD: -0.49, Signal: -0.42, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-17 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-18, Close: 18.00, RSI: 36.06, MACD: -0.47, Signal: -0.43, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-19, Close: 17.74, RSI: 32.66, MACD: -0.47, Signal: -0.44, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-19 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-20, Close: 17.20, RSI: 26.98, MACD: -0.51, Signal: -0.45, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-06-20 - Oversold condition met (RSI < 30). Waiting for MACD confirmation.
+Date: 2024-06-20 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-21, Close: 17.14, RSI: 26.43, MACD: -0.54, Signal: -0.47, Crossover: 0.00, Oversold Signal Active: True
+Date: 2024-06-21 - Oversold condition met (RSI < 30). Waiting for MACD confirmation.
+Date: 2024-06-21 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-24, Close: 16.88, RSI: 24.13, MACD: -0.58, Signal: -0.49, Crossover: 0.00, Oversold Signal Active: True
+Date: 2024-06-24 - Oversold condition met (RSI < 30). Waiting for MACD confirmation.
+Date: 2024-06-24 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-25, Close: 16.85, RSI: 23.87, MACD: -0.61, Signal: -0.52, Crossover: 0.00, Oversold Signal Active: True
+Date: 2024-06-25 - Oversold condition met (RSI < 30). Waiting for MACD confirmation.
+Date: 2024-06-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-26, Close: 17.20, RSI: 32.88, MACD: -0.59, Signal: -0.53, Crossover: 0.00, Oversold Signal Active: True
+Date: 2024-06-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-27, Close: 16.94, RSI: 30.04, MACD: -0.59, Signal: -0.54, Crossover: 0.00, Oversold Signal Active: True
+Date: 2024-06-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-06-28, Close: 17.17, RSI: 35.36, MACD: -0.57, Signal: -0.55, Crossover: 0.00, Oversold Signal Active: True
+Date: 2024-06-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-07-01, Close: 18.00, RSI: 50.12, MACD: -0.48, Signal: -0.53, Crossover: 1.00, Oversold Signal Active: True
+Date: 2024-07-01 - Evaluating Buy. Buy Condition Met: True
+2024-07-01 | BUY CREATE, Close: 18.00
+2024-07-02 | BUY EXECUTED, Price: 17.86, Cost: 94247.22, Comm: 0.00
+Date: 2024-07-02, Close: 17.52, RSI: 43.88, MACD: -0.44, Signal: -0.52, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-03, Close: 17.36, RSI: 42.00, MACD: -0.42, Signal: -0.50, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-04, Close: 16.95, RSI: 37.57, MACD: -0.43, Signal: -0.48, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-05, Close: 17.22, RSI: 41.92, MACD: -0.41, Signal: -0.47, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-08, Close: 16.93, RSI: 38.79, MACD: -0.41, Signal: -0.46, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-09, Close: 17.09, RSI: 41.39, MACD: -0.40, Signal: -0.45, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-10, Close: 16.99, RSI: 40.24, MACD: -0.39, Signal: -0.43, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-11, Close: 17.47, RSI: 47.74, MACD: -0.34, Signal: -0.42, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-12, Close: 16.92, RSI: 41.34, MACD: -0.34, Signal: -0.40, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-15, Close: 16.90, RSI: 41.12, MACD: -0.34, Signal: -0.39, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-16, Close: 17.05, RSI: 43.51, MACD: -0.33, Signal: -0.38, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-17, Close: 16.99, RSI: 42.76, MACD: -0.32, Signal: -0.37, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-18, Close: 17.09, RSI: 44.47, MACD: -0.29, Signal: -0.35, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-19, Close: 17.39, RSI: 49.35, MACD: -0.25, Signal: -0.33, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-22, Close: 17.59, RSI: 52.36, MACD: -0.20, Signal: -0.30, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-23, Close: 17.04, RSI: 44.53, MACD: -0.20, Signal: -0.28, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-24, Close: 16.91, RSI: 42.90, MACD: -0.21, Signal: -0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-25, Close: 16.95, RSI: 43.58, MACD: -0.21, Signal: -0.26, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-26, Close: 17.21, RSI: 47.96, MACD: -0.18, Signal: -0.24, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-29, Close: 17.06, RSI: 45.75, MACD: -0.18, Signal: -0.23, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-30, Close: 17.12, RSI: 46.80, MACD: -0.16, Signal: -0.22, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-07-31, Close: 17.45, RSI: 52.29, MACD: -0.13, Signal: -0.20, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-01, Close: 17.40, RSI: 51.43, MACD: -0.10, Signal: -0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-02, Close: 17.44, RSI: 52.11, MACD: -0.07, Signal: -0.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-05, Close: 17.15, RSI: 46.95, MACD: -0.07, Signal: -0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-06, Close: 17.29, RSI: 49.55, MACD: -0.06, Signal: -0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-07, Close: 17.18, RSI: 47.58, MACD: -0.06, Signal: -0.11, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-08, Close: 17.01, RSI: 44.63, MACD: -0.08, Signal: -0.11, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-09, Close: 16.90, RSI: 42.78, MACD: -0.09, Signal: -0.10, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-12, Close: 16.79, RSI: 40.95, MACD: -0.12, Signal: -0.11, Crossover: -1.00, Oversold Signal Active: False
+Date: 2024-08-13, Close: 16.89, RSI: 43.32, MACD: -0.12, Signal: -0.11, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-14, Close: 16.82, RSI: 42.05, MACD: -0.13, Signal: -0.11, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-15, Close: 16.94, RSI: 45.03, MACD: -0.13, Signal: -0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-16, Close: 16.91, RSI: 44.42, MACD: -0.13, Signal: -0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-19, Close: 16.92, RSI: 44.69, MACD: -0.13, Signal: -0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-20, Close: 16.90, RSI: 44.22, MACD: -0.12, Signal: -0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-21, Close: 16.93, RSI: 45.14, MACD: -0.12, Signal: -0.12, Crossover: 1.00, Oversold Signal Active: False
+Date: 2024-08-22, Close: 16.75, RSI: 40.79, MACD: -0.13, Signal: -0.12, Crossover: -1.00, Oversold Signal Active: False
+Date: 2024-08-23, Close: 16.25, RSI: 31.65, MACD: -0.17, Signal: -0.13, Crossover: 0.00, Oversold Signal Active: False
+2024-08-23 | SELL CREATE (Stop Loss), Close: 16.25
+2024-08-26 | SELL EXECUTED, Price: 16.26, Cost: 94247.22, Comm: 0.00
+2024-08-26 | OPERATION PROFIT, GROSS -8443.20, NET -8443.20
+Date: 2024-08-26, Close: 16.59, RSI: 41.28, MACD: -0.18, Signal: -0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-08-27, Close: 16.20, RSI: 35.16, MACD: -0.21, Signal: -0.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-08-28, Close: 16.25, RSI: 36.46, MACD: -0.23, Signal: -0.17, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-08-29, Close: 16.64, RSI: 45.63, MACD: -0.21, Signal: -0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-08-30, Close: 16.79, RSI: 48.69, MACD: -0.19, Signal: -0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-08-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-02, Close: 16.69, RSI: 46.80, MACD: -0.17, Signal: -0.18, Crossover: 1.00, Oversold Signal Active: False
+Date: 2024-09-02 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-03, Close: 16.91, RSI: 51.28, MACD: -0.14, Signal: -0.17, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-03 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-04, Close: 16.80, RSI: 49.06, MACD: -0.12, Signal: -0.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-04 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-05, Close: 16.91, RSI: 51.33, MACD: -0.09, Signal: -0.15, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-05 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-06, Close: 16.72, RSI: 47.39, MACD: -0.09, Signal: -0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-09, Close: 16.56, RSI: 44.31, MACD: -0.10, Signal: -0.13, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-10, Close: 16.41, RSI: 41.58, MACD: -0.11, Signal: -0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-11, Close: 16.61, RSI: 46.33, MACD: -0.11, Signal: -0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-12, Close: 16.42, RSI: 42.77, MACD: -0.12, Signal: -0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-12 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-13, Close: 16.13, RSI: 37.97, MACD: -0.15, Signal: -0.13, Crossover: -1.00, Oversold Signal Active: False
+Date: 2024-09-13 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-18, Close: 16.05, RSI: 36.75, MACD: -0.18, Signal: -0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-19, Close: 16.57, RSI: 48.39, MACD: -0.16, Signal: -0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-19 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-20, Close: 16.61, RSI: 49.17, MACD: -0.14, Signal: -0.14, Crossover: 1.00, Oversold Signal Active: False
+Date: 2024-09-20 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-23, Close: 16.51, RSI: 47.26, MACD: -0.13, Signal: -0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-23 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-24, Close: 16.99, RSI: 56.08, MACD: -0.08, Signal: -0.13, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-24 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-25, Close: 17.09, RSI: 57.67, MACD: -0.03, Signal: -0.11, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-26, Close: 17.67, RSI: 65.47, MACD: 0.05, Signal: -0.08, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-27, Close: 18.72, RSI: 74.60, MACD: 0.20, Signal: -0.02, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-09-30, Close: 20.60, RSI: 83.18, MACD: 0.46, Signal: 0.08, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-09-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-08, Close: 22.34, RSI: 87.41, MACD: 0.80, Signal: 0.22, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-09, Close: 20.22, RSI: 65.71, MACD: 0.89, Signal: 0.36, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-10, Close: 20.56, RSI: 67.12, MACD: 0.98, Signal: 0.48, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-11, Close: 19.87, RSI: 61.58, MACD: 0.98, Signal: 0.58, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-14, Close: 19.94, RSI: 61.92, MACD: 0.97, Signal: 0.66, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-14 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-15, Close: 19.33, RSI: 57.14, MACD: 0.91, Signal: 0.71, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-15 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-16, Close: 19.06, RSI: 55.10, MACD: 0.83, Signal: 0.73, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-16 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-17, Close: 18.74, RSI: 52.71, MACD: 0.73, Signal: 0.73, Crossover: -1.00, Oversold Signal Active: False
+Date: 2024-10-17 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-18, Close: 19.27, RSI: 56.11, MACD: 0.69, Signal: 0.72, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-21, Close: 19.87, RSI: 59.65, MACD: 0.69, Signal: 0.72, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-21 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-22, Close: 19.97, RSI: 60.22, MACD: 0.70, Signal: 0.71, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-22 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-23, Close: 20.35, RSI: 62.41, MACD: 0.72, Signal: 0.72, Crossover: 1.00, Oversold Signal Active: False
+Date: 2024-10-23 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-24, Close: 19.99, RSI: 59.09, MACD: 0.71, Signal: 0.71, Crossover: -1.00, Oversold Signal Active: False
+Date: 2024-10-24 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-25, Close: 21.13, RSI: 65.38, MACD: 0.78, Signal: 0.73, Crossover: 1.00, Oversold Signal Active: False
+Date: 2024-10-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-28, Close: 21.30, RSI: 66.21, MACD: 0.84, Signal: 0.75, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-29, Close: 20.90, RSI: 62.40, MACD: 0.84, Signal: 0.77, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-30, Close: 21.09, RSI: 63.48, MACD: 0.85, Signal: 0.78, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-10-31, Close: 21.43, RSI: 65.38, MACD: 0.88, Signal: 0.80, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-10-31 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-01, Close: 23.58, RSI: 74.46, MACD: 1.06, Signal: 0.85, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-01 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-04, Close: 23.82, RSI: 75.24, MACD: 1.21, Signal: 0.92, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-04 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-05, Close: 25.56, RSI: 80.01, MACD: 1.45, Signal: 1.03, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-05 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-06, Close: 26.62, RSI: 82.25, MACD: 1.71, Signal: 1.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-07, Close: 26.58, RSI: 81.88, MACD: 1.88, Signal: 1.31, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-07 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-08, Close: 25.80, RSI: 74.75, MACD: 1.94, Signal: 1.44, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-11, Close: 25.80, RSI: 74.75, MACD: 1.96, Signal: 1.54, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-12, Close: 25.13, RSI: 68.79, MACD: 1.91, Signal: 1.61, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-12 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-13, Close: 25.52, RSI: 70.28, MACD: 1.87, Signal: 1.66, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-13 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-14, Close: 24.10, RSI: 59.22, MACD: 1.71, Signal: 1.67, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-14 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-15, Close: 23.29, RSI: 54.00, MACD: 1.49, Signal: 1.64, Crossover: -1.00, Oversold Signal Active: False
+Date: 2024-11-15 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-18, Close: 22.78, RSI: 50.95, MACD: 1.27, Signal: 1.56, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-19, Close: 23.18, RSI: 53.18, MACD: 1.11, Signal: 1.47, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-19 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-20, Close: 23.39, RSI: 54.36, MACD: 0.99, Signal: 1.38, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-20 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-21, Close: 23.23, RSI: 53.26, MACD: 0.88, Signal: 1.28, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-21 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-22, Close: 23.60, RSI: 55.49, MACD: 0.80, Signal: 1.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-22 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-25, Close: 23.00, RSI: 51.22, MACD: 0.69, Signal: 1.08, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-26, Close: 22.76, RSI: 49.57, MACD: 0.57, Signal: 0.98, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-27, Close: 22.91, RSI: 50.64, MACD: 0.49, Signal: 0.88, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-28, Close: 22.50, RSI: 47.67, MACD: 0.38, Signal: 0.78, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-11-29, Close: 22.82, RSI: 50.13, MACD: 0.32, Signal: 0.69, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-11-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-02, Close: 23.32, RSI: 53.78, MACD: 0.31, Signal: 0.61, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-02 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-03, Close: 23.43, RSI: 54.57, MACD: 0.30, Signal: 0.55, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-03 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-04, Close: 23.48, RSI: 54.95, MACD: 0.30, Signal: 0.50, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-04 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-05, Close: 23.05, RSI: 51.03, MACD: 0.26, Signal: 0.45, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-05 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-06, Close: 23.14, RSI: 51.81, MACD: 0.23, Signal: 0.41, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-09, Close: 22.85, RSI: 49.11, MACD: 0.19, Signal: 0.37, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-10, Close: 22.93, RSI: 49.89, MACD: 0.16, Signal: 0.32, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-11, Close: 22.99, RSI: 50.50, MACD: 0.13, Signal: 0.29, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-12, Close: 22.93, RSI: 49.84, MACD: 0.11, Signal: 0.25, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-12 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-13, Close: 22.35, RSI: 43.94, MACD: 0.04, Signal: 0.21, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-13 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-16, Close: 22.04, RSI: 41.14, MACD: -0.03, Signal: 0.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-16 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-17, Close: 22.00, RSI: 40.78, MACD: -0.10, Signal: 0.11, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-17 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-18, Close: 22.06, RSI: 41.61, MACD: -0.14, Signal: 0.06, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-19, Close: 22.17, RSI: 43.18, MACD: -0.17, Signal: 0.01, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-19 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-20, Close: 22.02, RSI: 41.54, MACD: -0.19, Signal: -0.03, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-20 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-23, Close: 21.77, RSI: 38.89, MACD: -0.23, Signal: -0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-23 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-24, Close: 21.89, RSI: 40.84, MACD: -0.25, Signal: -0.11, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-24 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-25, Close: 21.52, RSI: 36.92, MACD: -0.30, Signal: -0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-26, Close: 21.64, RSI: 38.97, MACD: -0.31, Signal: -0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-27, Close: 21.61, RSI: 38.63, MACD: -0.33, Signal: -0.21, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-30, Close: 21.75, RSI: 41.19, MACD: -0.33, Signal: -0.23, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2024-12-31, Close: 21.19, RSI: 34.92, MACD: -0.36, Signal: -0.26, Crossover: 0.00, Oversold Signal Active: False
+Date: 2024-12-31 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-01-02, Close: 20.46, RSI: 28.77, MACD: -0.45, Signal: -0.30, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-02 - Oversold condition met (RSI < 30). Waiting for MACD confirmation.
+Date: 2025-01-02 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-01-03, Close: 20.30, RSI: 27.63, MACD: -0.52, Signal: -0.34, Crossover: 0.00, Oversold Signal Active: True
+Date: 2025-01-03 - Oversold condition met (RSI < 30). Waiting for MACD confirmation.
+Date: 2025-01-03 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-01-06, Close: 20.79, RSI: 36.04, MACD: -0.53, Signal: -0.38, Crossover: 0.00, Oversold Signal Active: True
+Date: 2025-01-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-01-07, Close: 21.44, RSI: 45.15, MACD: -0.49, Signal: -0.40, Crossover: 0.00, Oversold Signal Active: True
+Date: 2025-01-07 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-01-08, Close: 21.01, RSI: 40.99, MACD: -0.48, Signal: -0.42, Crossover: 0.00, Oversold Signal Active: True
+Date: 2025-01-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-01-09, Close: 21.13, RSI: 42.58, MACD: -0.45, Signal: -0.42, Crossover: 0.00, Oversold Signal Active: True
+Date: 2025-01-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-01-10, Close: 21.11, RSI: 42.38, MACD: -0.43, Signal: -0.43, Crossover: 0.00, Oversold Signal Active: True
+Date: 2025-01-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-01-13, Close: 21.28, RSI: 44.81, MACD: -0.40, Signal: -0.42, Crossover: 1.00, Oversold Signal Active: True
+Date: 2025-01-13 - Evaluating Buy. Buy Condition Met: True
+2025-01-13 | BUY CREATE, Close: 21.28
+2025-01-14 | BUY EXECUTED, Price: 21.34, Cost: 87216.58, Comm: 0.00
+Date: 2025-01-14, Close: 22.05, RSI: 54.23, MACD: -0.31, Signal: -0.40, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-15, Close: 21.86, RSI: 51.87, MACD: -0.24, Signal: -0.37, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-16, Close: 21.86, RSI: 51.87, MACD: -0.19, Signal: -0.33, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-17, Close: 21.94, RSI: 52.87, MACD: -0.14, Signal: -0.29, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-20, Close: 21.37, RSI: 45.61, MACD: -0.15, Signal: -0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-21, Close: 21.13, RSI: 42.94, MACD: -0.17, Signal: -0.25, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-22, Close: 21.03, RSI: 41.84, MACD: -0.20, Signal: -0.24, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-23, Close: 21.26, RSI: 45.31, MACD: -0.19, Signal: -0.23, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-24, Close: 21.50, RSI: 48.75, MACD: -0.17, Signal: -0.22, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-01-27, Close: 21.02, RSI: 42.93, MACD: -0.19, Signal: -0.21, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-05, Close: 21.60, RSI: 50.60, MACD: -0.15, Signal: -0.20, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-06, Close: 23.39, RSI: 65.85, MACD: 0.02, Signal: -0.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-07, Close: 23.08, RSI: 62.26, MACD: 0.13, Signal: -0.10, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-10, Close: 23.23, RSI: 63.30, MACD: 0.22, Signal: -0.04, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-11, Close: 23.07, RSI: 61.36, MACD: 0.28, Signal: 0.03, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-12, Close: 22.99, RSI: 60.36, MACD: 0.32, Signal: 0.09, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-13, Close: 22.65, RSI: 56.18, MACD: 0.32, Signal: 0.13, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-14, Close: 22.72, RSI: 56.84, MACD: 0.32, Signal: 0.17, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-17, Close: 22.86, RSI: 58.20, MACD: 0.33, Signal: 0.20, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-18, Close: 22.48, RSI: 53.29, MACD: 0.30, Signal: 0.22, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-19, Close: 22.95, RSI: 58.01, MACD: 0.31, Signal: 0.24, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-20, Close: 23.30, RSI: 61.16, MACD: 0.35, Signal: 0.26, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-21, Close: 23.11, RSI: 58.59, MACD: 0.35, Signal: 0.28, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-24, Close: 23.03, RSI: 57.50, MACD: 0.35, Signal: 0.29, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-25, Close: 22.77, RSI: 53.97, MACD: 0.32, Signal: 0.30, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-26, Close: 22.78, RSI: 54.08, MACD: 0.30, Signal: 0.30, Crossover: -1.00, Oversold Signal Active: False
+Date: 2025-02-27, Close: 22.55, RSI: 50.88, MACD: 0.26, Signal: 0.29, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-02-28, Close: 22.34, RSI: 48.09, MACD: 0.20, Signal: 0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-03, Close: 22.97, RSI: 55.91, MACD: 0.21, Signal: 0.26, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-04, Close: 23.06, RSI: 56.91, MACD: 0.22, Signal: 0.25, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-05, Close: 22.72, RSI: 52.11, MACD: 0.20, Signal: 0.24, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-06, Close: 22.91, RSI: 54.42, MACD: 0.20, Signal: 0.23, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-07, Close: 23.13, RSI: 57.02, MACD: 0.21, Signal: 0.23, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-10, Close: 23.09, RSI: 56.39, MACD: 0.21, Signal: 0.22, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-11, Close: 24.02, RSI: 65.81, MACD: 0.29, Signal: 0.24, Crossover: 1.00, Oversold Signal Active: False
+Date: 2025-03-12, Close: 23.43, RSI: 57.35, MACD: 0.29, Signal: 0.25, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-13, Close: 23.24, RSI: 54.90, MACD: 0.28, Signal: 0.26, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-14, Close: 23.48, RSI: 57.37, MACD: 0.29, Signal: 0.26, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-17, Close: 23.47, RSI: 57.23, MACD: 0.29, Signal: 0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-18, Close: 23.56, RSI: 58.23, MACD: 0.30, Signal: 0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-19, Close: 23.54, RSI: 57.91, MACD: 0.29, Signal: 0.28, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-20, Close: 23.22, RSI: 52.86, MACD: 0.26, Signal: 0.27, Crossover: -1.00, Oversold Signal Active: False
+Date: 2025-03-21, Close: 22.51, RSI: 43.75, MACD: 0.18, Signal: 0.26, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-24, Close: 22.64, RSI: 45.60, MACD: 0.12, Signal: 0.23, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-25, Close: 22.84, RSI: 48.41, MACD: 0.09, Signal: 0.20, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-26, Close: 23.31, RSI: 54.37, MACD: 0.11, Signal: 0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-27, Close: 23.27, RSI: 53.80, MACD: 0.11, Signal: 0.17, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-28, Close: 23.15, RSI: 52.04, MACD: 0.11, Signal: 0.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-03-31, Close: 22.63, RSI: 45.14, MACD: 0.06, Signal: 0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-01, Close: 22.79, RSI: 47.45, MACD: 0.03, Signal: 0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-02, Close: 22.69, RSI: 46.14, MACD: 0.01, Signal: 0.09, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-03, Close: 22.86, RSI: 48.73, MACD: -0.00, Signal: 0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-07, Close: 22.74, RSI: 47.01, MACD: -0.02, Signal: 0.06, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-08, Close: 23.91, RSI: 61.31, MACD: 0.06, Signal: 0.06, Crossover: 1.00, Oversold Signal Active: False
+Date: 2025-04-09, Close: 25.27, RSI: 71.08, MACD: 0.23, Signal: 0.09, Crossover: 0.00, Oversold Signal Active: False
+2025-04-09 | SELL CREATE (RSI Overbought), Close: 25.27
+2025-04-10 | SELL EXECUTED, Price: 25.16, Cost: 87216.58, Comm: 0.00
+2025-04-10 | OPERATION PROFIT, GROSS 15612.34, NET 15612.34
+Date: 2025-04-10, Close: 24.92, RSI: 66.43, MACD: 0.34, Signal: 0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-11, Close: 24.69, RSI: 63.49, MACD: 0.40, Signal: 0.19, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-14, Close: 24.35, RSI: 59.32, MACD: 0.41, Signal: 0.24, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-14 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-15, Close: 24.01, RSI: 55.39, MACD: 0.39, Signal: 0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-15 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-16, Close: 24.29, RSI: 57.86, MACD: 0.39, Signal: 0.29, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-16 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-17, Close: 23.99, RSI: 54.39, MACD: 0.36, Signal: 0.31, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-17 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-18, Close: 23.52, RSI: 49.38, MACD: 0.30, Signal: 0.30, Crossover: -1.00, Oversold Signal Active: False
+Date: 2025-04-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-21, Close: 23.54, RSI: 49.59, MACD: 0.25, Signal: 0.29, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-21 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-22, Close: 23.13, RSI: 45.38, MACD: 0.18, Signal: 0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-22 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-23, Close: 23.47, RSI: 49.23, MACD: 0.14, Signal: 0.24, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-23 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-24, Close: 22.97, RSI: 44.29, MACD: 0.07, Signal: 0.21, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-24 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-25, Close: 23.11, RSI: 45.92, MACD: 0.03, Signal: 0.17, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-28, Close: 23.39, RSI: 49.14, MACD: 0.02, Signal: 0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-29, Close: 23.21, RSI: 47.20, MACD: -0.01, Signal: 0.11, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-04-30, Close: 23.26, RSI: 47.82, MACD: -0.02, Signal: 0.09, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-04-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-06, Close: 24.54, RSI: 60.54, MACD: 0.07, Signal: 0.08, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-07, Close: 24.19, RSI: 56.49, MACD: 0.11, Signal: 0.09, Crossover: 1.00, Oversold Signal Active: False
+Date: 2025-05-07 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-08, Close: 24.22, RSI: 56.75, MACD: 0.15, Signal: 0.10, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-09, Close: 24.35, RSI: 57.96, MACD: 0.18, Signal: 0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-12, Close: 24.53, RSI: 59.64, MACD: 0.22, Signal: 0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-12 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-13, Close: 24.12, RSI: 54.32, MACD: 0.22, Signal: 0.15, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-13 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-14, Close: 24.40, RSI: 57.13, MACD: 0.24, Signal: 0.17, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-14 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-15, Close: 24.63, RSI: 59.35, MACD: 0.27, Signal: 0.19, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-15 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-16, Close: 24.20, RSI: 53.76, MACD: 0.25, Signal: 0.20, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-16 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-19, Close: 23.73, RSI: 48.39, MACD: 0.20, Signal: 0.20, Crossover: -1.00, Oversold Signal Active: False
+Date: 2025-05-19 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-20, Close: 23.77, RSI: 48.86, MACD: 0.16, Signal: 0.19, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-20 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-21, Close: 23.69, RSI: 47.92, MACD: 0.12, Signal: 0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-21 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-22, Close: 23.32, RSI: 43.75, MACD: 0.06, Signal: 0.15, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-22 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-23, Close: 23.18, RSI: 42.25, MACD: -0.00, Signal: 0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-23 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-26, Close: 23.38, RSI: 45.14, MACD: -0.03, Signal: 0.09, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-27, Close: 23.21, RSI: 43.16, MACD: -0.07, Signal: 0.06, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-28, Close: 23.00, RSI: 40.79, MACD: -0.12, Signal: 0.02, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-29, Close: 23.30, RSI: 45.41, MACD: -0.13, Signal: -0.01, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-05-30, Close: 23.24, RSI: 44.66, MACD: -0.14, Signal: -0.03, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-05-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-03, Close: 23.62, RSI: 50.27, MACD: -0.11, Signal: -0.05, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-03 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-04, Close: 24.07, RSI: 55.97, MACD: -0.06, Signal: -0.05, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-04 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-05, Close: 23.98, RSI: 54.62, MACD: -0.02, Signal: -0.05, Crossover: 1.00, Oversold Signal Active: False
+Date: 2025-06-05 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-06, Close: 24.03, RSI: 55.27, MACD: 0.01, Signal: -0.03, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-09, Close: 24.74, RSI: 63.25, MACD: 0.09, Signal: -0.01, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-10, Close: 24.67, RSI: 62.07, MACD: 0.15, Signal: 0.02, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-11, Close: 25.52, RSI: 69.49, MACD: 0.26, Signal: 0.07, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-12, Close: 25.34, RSI: 66.52, MACD: 0.33, Signal: 0.12, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-12 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-13, Close: 25.07, RSI: 62.23, MACD: 0.36, Signal: 0.17, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-13 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-16, Close: 25.44, RSI: 65.51, MACD: 0.41, Signal: 0.22, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-16 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-17, Close: 25.15, RSI: 61.04, MACD: 0.42, Signal: 0.26, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-17 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-18, Close: 24.72, RSI: 55.03, MACD: 0.39, Signal: 0.28, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-19, Close: 24.17, RSI: 48.46, MACD: 0.32, Signal: 0.29, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-19 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-20, Close: 23.97, RSI: 46.29, MACD: 0.24, Signal: 0.28, Crossover: -1.00, Oversold Signal Active: False
+Date: 2025-06-20 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-23, Close: 24.08, RSI: 47.68, MACD: 0.19, Signal: 0.26, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-23 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-24, Close: 24.35, RSI: 51.02, MACD: 0.16, Signal: 0.24, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-24 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-25, Close: 24.64, RSI: 54.38, MACD: 0.17, Signal: 0.23, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-26, Close: 24.28, RSI: 49.81, MACD: 0.14, Signal: 0.21, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-27, Close: 24.40, RSI: 51.28, MACD: 0.12, Signal: 0.19, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-06-30, Close: 24.90, RSI: 56.94, MACD: 0.15, Signal: 0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-06-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-01, Close: 24.86, RSI: 56.38, MACD: 0.17, Signal: 0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-01 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-02, Close: 24.58, RSI: 52.46, MACD: 0.16, Signal: 0.18, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-02 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-03, Close: 24.63, RSI: 53.08, MACD: 0.15, Signal: 0.17, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-03 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-04, Close: 24.42, RSI: 50.09, MACD: 0.13, Signal: 0.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-04 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-07, Close: 24.42, RSI: 50.09, MACD: 0.11, Signal: 0.15, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-07 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-08, Close: 24.89, RSI: 56.46, MACD: 0.13, Signal: 0.15, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-09, Close: 24.55, RSI: 51.36, MACD: 0.12, Signal: 0.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-10, Close: 27.01, RSI: 71.46, MACD: 0.30, Signal: 0.17, Crossover: 1.00, Oversold Signal Active: False
+Date: 2025-07-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-11, Close: 29.71, RSI: 80.83, MACD: 0.66, Signal: 0.27, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-14, Close: 29.88, RSI: 81.24, MACD: 0.94, Signal: 0.40, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-14 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-15, Close: 29.00, RSI: 72.45, MACD: 1.09, Signal: 0.54, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-15 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-16, Close: 29.04, RSI: 72.60, MACD: 1.19, Signal: 0.67, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-16 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-17, Close: 30.00, RSI: 75.88, MACD: 1.33, Signal: 0.80, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-17 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-18, Close: 32.96, RSI: 82.75, MACD: 1.67, Signal: 0.98, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-21, Close: 35.05, RSI: 85.82, MACD: 2.08, Signal: 1.20, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-21 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-22, Close: 34.37, RSI: 80.78, MACD: 2.32, Signal: 1.42, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-22 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-23, Close: 34.99, RSI: 81.83, MACD: 2.53, Signal: 1.64, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-23 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-24, Close: 38.14, RSI: 86.00, MACD: 2.92, Signal: 1.90, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-24 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-25, Close: 38.25, RSI: 86.12, MACD: 3.20, Signal: 2.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-28, Close: 40.06, RSI: 87.95, MACD: 3.53, Signal: 2.43, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-29, Close: 39.43, RSI: 83.81, MACD: 3.69, Signal: 2.69, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-30, Close: 39.59, RSI: 84.02, MACD: 3.80, Signal: 2.91, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-30 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-07-31, Close: 37.50, RSI: 71.28, MACD: 3.66, Signal: 3.06, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-07-31 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-01, Close: 36.00, RSI: 63.80, MACD: 3.40, Signal: 3.13, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-01 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-04, Close: 36.30, RSI: 64.60, MACD: 3.18, Signal: 3.14, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-04 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-05, Close: 36.45, RSI: 65.01, MACD: 2.98, Signal: 3.11, Crossover: -1.00, Oversold Signal Active: False
+Date: 2025-08-05 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-06, Close: 36.61, RSI: 65.48, MACD: 2.81, Signal: 3.05, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-06 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-07, Close: 38.81, RSI: 71.17, MACD: 2.81, Signal: 3.00, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-07 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-08, Close: 38.69, RSI: 70.49, MACD: 2.77, Signal: 2.95, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-11, Close: 38.65, RSI: 70.25, MACD: 2.71, Signal: 2.90, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-12, Close: 37.47, RSI: 63.34, MACD: 2.53, Signal: 2.83, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-12 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-13, Close: 37.59, RSI: 63.73, MACD: 2.38, Signal: 2.74, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-13 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-14, Close: 38.35, RSI: 66.19, MACD: 2.29, Signal: 2.65, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-14 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-15, Close: 39.00, RSI: 68.17, MACD: 2.24, Signal: 2.57, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-15 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-18, Close: 42.90, RSI: 76.93, MACD: 2.50, Signal: 2.55, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-18 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-19, Close: 44.45, RSI: 79.36, MACD: 2.79, Signal: 2.60, Crossover: 1.00, Oversold Signal Active: False
+Date: 2025-08-19 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-20, Close: 45.43, RSI: 80.74, MACD: 3.06, Signal: 2.69, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-20 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-21, Close: 44.60, RSI: 76.09, MACD: 3.18, Signal: 2.79, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-21 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-22, Close: 47.95, RSI: 80.87, MACD: 3.50, Signal: 2.93, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-22 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-25, Close: 52.69, RSI: 85.34, MACD: 4.09, Signal: 3.16, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-25 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-26, Close: 49.11, RSI: 71.72, MACD: 4.22, Signal: 3.37, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-26 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-27, Close: 53.46, RSI: 76.60, MACD: 4.62, Signal: 3.62, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-27 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-28, Close: 56.14, RSI: 79.01, MACD: 5.09, Signal: 3.92, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-28 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-08-29, Close: 56.81, RSI: 79.58, MACD: 5.46, Signal: 4.22, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-08-29 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-01, Close: 56.55, RSI: 78.69, MACD: 5.66, Signal: 4.51, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-09-01 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-02, Close: 53.66, RSI: 69.43, MACD: 5.53, Signal: 4.72, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-09-02 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-03, Close: 53.70, RSI: 69.49, MACD: 5.37, Signal: 4.85, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-09-03 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-04, Close: 49.49, RSI: 57.99, MACD: 4.84, Signal: 4.84, Crossover: -1.00, Oversold Signal Active: False
+Date: 2025-09-04 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-05, Close: 50.61, RSI: 59.89, MACD: 4.46, Signal: 4.77, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-09-05 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-08, Close: 49.83, RSI: 57.92, MACD: 4.05, Signal: 4.62, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-09-08 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-09, Close: 49.52, RSI: 57.12, MACD: 3.66, Signal: 4.43, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-09-09 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-10, Close: 49.36, RSI: 56.68, MACD: 3.30, Signal: 4.20, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-09-10 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-11, Close: 50.56, RSI: 59.20, MACD: 3.07, Signal: 3.98, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-09-11 - Evaluating Buy. Buy Condition Met: False
+Date: 2025-09-12, Close: 53.59, RSI: 64.77, MACD: 3.10, Signal: 3.80, Crossover: 0.00, Oversold Signal Active: False
+Date: 2025-09-12 - Evaluating Buy. Buy Condition Met: False
+
+--- Performance Metrics ---
+Initial Value: 100000.00
+Final Value: 107169.14
+Total Return: 7169.14 (7.17%)
+Annualized Return: 4.17%
+Total Trades: 0
+Win Rate: N/A (需要 TradeAnalyzer)
+Profit Factor: N/A (需要 TradeAnalyzer)
+Total Profit (Est.): 7169.14
+Total Loss (Est.): 0.00
+--- End Metrics ---
+
+Warning: Length mismatch. Strategy returns: 379, DataFrame: 413
+
+

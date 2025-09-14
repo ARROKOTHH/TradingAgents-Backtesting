@@ -21,97 +21,31 @@ def auto_correct_backtrader_code(code: str) -> str:
     """
     自动修正Backtrader代码中常见的.lines属性访问错误。
     """
-    import re
-    
-    # 添加调试信息
-    print("[DEBUG] 开始自动修正Backtrader代码...")
-    print("[DEBUG] 修正前的代码:")
-    print(code)
-    print("")
-    
-    # 定义指标类名，用于识别指标初始化语句
-    indicator_classes = [
-        'SimpleMovingAverage', 'ExponentialMovingAverage', 'RSI', 'MACD', 
-        'BollingerBands', 'AverageTrueRange', 'Stochastic', 'ADX', 'DMI',
-        'CrossOver', 'CrossDown'
+    # 规则：(错误模式, 正确模式)
+    # 使用正则表达式确保只替换属性访问，避免替换字符串内容
+    correction_rules = [
+        (r'(\.histo)', r'.lines.histo'),
+        (r'(\.DIp)', r'.lines.DIp'),
+        (r'(\.DIm)', r'.lines.DIm'),
+        (r'(\.DIplus)', r'.lines.DIp'),
+        (r'(\.DIminus)', r'.lines.DIm'),
+        (r'(\.adx)', r'.lines.adx'),
+        (r'(\.top)', r'.lines.top'),
+        (r'(\.mid)', r'.lines.mid'),
+        (r'(\.bot)', r'.lines.bot'),
+        (r'(\.signal)', r'.lines.signal'),
+        (r'(\.macd)', r'.lines.macd'),
     ]
     
-    # 构建正则表达式模式来匹配指标初始化语句
-    indicator_class_pattern = '|'.join(indicator_classes)
-    # 转义特殊字符以避免正则表达式错误
-    assignment_pattern = re.compile(
-        r'(\w+)\s*=\s*bt\.indicators\.(' + indicator_class_pattern + r')\s*\('
-    )
-    
-    # 找到所有指标变量名
-    indicator_vars = set()
-    for match in assignment_pattern.finditer(code):
-        var_name = match.group(1)
-        indicator_vars.add(var_name)
-    
-    print(f"[DEBUG] 识别到的指标变量名: {indicator_vars}")
-    
-    # 新增：修正AI错误的指标初始化方式
-    # 例如：self.rsi.lines.rsi = bt.indicators.RSI(...) -> self.rsi = bt.indicators.RSI(...)
-    wrong_init_rules = []
-    for var_name in indicator_vars:
-        # 错误的初始化方式：self.var.lines.var = bt.indicators.Indicator(...)
-        wrong_init_rules.append((
-            rf'self\.{var_name}\.lines\.{var_name}\s*=\s*bt\.indicators\.',
-            f'self.{var_name} = bt.indicators.'
-        ))
-    
-    # 定义需要修正的属性访问模式
-    # 只修正那些明确是指标变量的属性访问
-    correction_rules = []
-    for var_name in indicator_vars:
-        # 修正 .histo, .rsi, .atr 等属性访问
-        correction_rules.append((rf'\b{var_name}\.histo\b', f'{var_name}.lines.histo'))
-        correction_rules.append((rf'\b{var_name}\.macd\b', f'{var_name}.lines.macd'))
-        correction_rules.append((rf'\b{var_name}\.signal\b', f'{var_name}.lines.signal'))
-        correction_rules.append((rf'\b{var_name}\.DIp\b', f'{var_name}.lines.DIp'))
-        correction_rules.append((rf'\b{var_name}\.DIm\b', f'{var_name}.lines.DIm'))
-        correction_rules.append((rf'\b{var_name}\.adx\b', f'{var_name}.lines.adx'))
-        correction_rules.append((rf'\b{var_name}\.top\b', f'{var_name}.lines.top'))
-        correction_rules.append((rf'\b{var_name}\.mid\b', f'{var_name}.lines.mid'))
-        correction_rules.append((rf'\b{var_name}\.bot\b', f'{var_name}.lines.bot'))
-        correction_rules.append((rf'\b{var_name}\.rsi\b', f'{var_name}.lines.rsi'))
-        correction_rules.append((rf'\b{var_name}\.percK\b', f'{var_name}.lines.percK'))
-        correction_rules.append((rf'\b{var_name}\.percD\b', f'{var_name}.lines.percD'))
-        correction_rules.append((rf'\b{var_name}\.atr\b', f'{var_name}.lines.atr'))
-        correction_rules.append((rf'\b{var_name}\.sma\b', f'{var_name}.lines.sma'))
-        correction_rules.append((rf'\b{var_name}\.ema\b', f'{var_name}.lines.ema'))
-    
-    # 合并规则，特定变量的规则优先
-    all_rules = wrong_init_rules + correction_rules
-    
     corrected_code = code
-    modifications_made = []
-    
-    for pattern, replacement in all_rules:
-        # 记录替换前的代码
-        original_code = corrected_code
+    for pattern, replacement in correction_rules:
+        # 使用负向先行断言来避免重复替换, e.g., .lines.histo
+        regex = r'(?<!\.lines)' + pattern
+        corrected_code = re.sub(regex, replacement, corrected_code)
         
-        # 应用替换
-        corrected_code = re.sub(pattern, replacement, corrected_code)
-        
-        # 如果代码发生了变化，记录下来
-        if original_code != corrected_code:
-            modifications_made.append(f"应用规则: {pattern} -> {replacement}")
-    
-    print("[DEBUG] 自动修正完成。")
-    if modifications_made:
-        print("[DEBUG] 执行的修正操作:")
-        for mod in modifications_made:
-            print("  - " + mod)
-        print("[DEBUG] 修正后的代码:")
-        print(corrected_code)
-        print("")
-    else:
-        print("[DEBUG] 未发现需要修正的内容。")
-        print("")
-        
-    return corrected_codedef get_llm_instance(llm_config: dict):
+    return corrected_code
+
+def get_llm_instance(llm_config: dict):
     """根据传入的完整LLM配置，创建并返回一个LLM实例"""
     provider = llm_config.get("llm_provider")
     # 优先使用深度思考模型，如果不存在则使用快速思考模型
@@ -210,6 +144,7 @@ def render_strategy_backtesting_page(llm_config: dict):
 2.  **信息源黑名单**: 您 **必须完全忽略** 报告中所有后续的、包含二次解读和多方辩论的模块，包括但不限于：
     *   风险评估（所有风险分析师的观点）
     *   研究团队决策（多头/空头研究员的辩论）
+    *   交易团队计划
     *   风险管理团队决策
 3.  **决策主导思想**: 以【投资决策摘要】中的“投资建议”（如‘买入’、‘持有’）作为您构建策略的**核心指导方向**（即，构建一个做多策略、中性策略还是规避策略）。您的角色是基于原始分析，为这个大方向设计出最合理的量化执行方案。
 
@@ -264,7 +199,7 @@ def render_strategy_backtesting_page(llm_config: dict):
                 st.session_state.syntax_error = None
 
             except Exception as e:
-                st.error(f"❌ 解析报告时发生错误: {e}")
+                st.error(f"❌ 解析报告时发生错误: {{e}}")
                 st.exception(e)
 
     if st.session_state.report_summary:
@@ -294,18 +229,11 @@ def render_strategy_backtesting_page(llm_config: dict):
             index=default_index,
             key="final_risk_appetite"
         )
-        st.info(f"AI分析师的建议是“{suggested_risk}”，但最终将以您选择的“{final_risk_appetite}”等级生成策略。" )
+        st.info(f"AI分析师的建议是“{{suggested_risk}}”，但最终将以您选择的“{{final_risk_appetite}}”等级生成策略。" )
 
     # --- 2. 生成策略代码 ---
     st.markdown("---")
     st.subheader("第二步: 生成策略代码 (AI自我修正)")
-    
-    # 新增：提供回测错误信息的输入区域
-    with st.expander("高级：提供回测错误以生成修复代码", expanded=False):
-        st.markdown("如果您在回测时遇到了错误，可以将错误信息粘贴到下方，并勾选复选框，然后重新点击“生成策略”按钮，AI将尝试基于错误信息修复代码。")
-        backtest_error_for_fix = st.text_area("(可选) 粘贴回测错误信息以帮助AI修复代码:", key="backtest_error_for_fix")
-        use_backtest_error_for_fix = st.checkbox("使用提供的错误信息生成修复代码", value=False, key="use_backtest_error_for_fix")
-
     if st.button("2. 生成策略", key="generate_code_button", disabled=not st.session_state.report_summary):
         with st.spinner("正在调用AI工程师生成代码，AI将自动修正语法错误..."):
             try:
@@ -317,125 +245,13 @@ def render_strategy_backtesting_page(llm_config: dict):
                 error_message = ""
                 
                 for i in range(max_retries):
-                    st.write(f"正在进行第 {i + 1}/{max_retries} 次代码生成尝试...")
+                    st.write(f"正在进行第 {{i + 1}}/{{max_retries}} 次代码生成尝试...")
 
-                    # 决定使用哪个Prompt
                     if i == 0:
-                        # 检查是否使用回测错误进行修复
-                        if use_backtest_error_for_fix and backtest_error_for_fix.strip():
-                            # 使用回测错误修复的Prompt
-                            prompt = f"""
-您是一位顶级的、精通`backtrader`框架的量化策略工程师。您上次生成的策略代码在回测时出现了错误，请根据错误信息进行修复。原始策略要求和最终风险偏好不变。
-
-**【最终风险偏好】**: **{st.session_state.final_risk_appetite}**
-
-**【有问题的代码】:**
----
-{st.session_state.strategy_code}
----
-
-**【回测错误】:**
----
-{backtest_error_for_fix}
----
-
-**【原始策略要求】:**
----
-{st.session_state.report_summary}
----
-
----
-**【极其重要的警告】**
-以下错误是绝对不能犯的，如果您的代码中出现这些错误，将会被严厉批评并要求重新生成：
-1.  **绝对禁止**: 直接访问多线指标的属性，如 `macd.histo`, `bbands.top` 等。
-2.  **必须使用**: 通过 `.lines` 属性访问，如 `macd.lines.histo`, `bbands.lines.top` 等。
-
-**【强制修复指令】**
-请仔细检查代码中所有对 `backtrader` 指标属性的访问。对于像 `MACD`, `BollingerBands`, `ADX` 这样的多线指标，必须使用 `.lines` 属性来访问其子线。
-- 错误示例: `self.macd.histo`, `self.bband.top`, `self.dmi.DIplus`
-- 正确示例: `self.macd.lines.histo`, `self.bband.lines.top`, `self.dmi.lines.DIp`
-
----
-**【Backtrader 编码核心准则】**
-请再次检查您的代码，确保它严格遵守了以下所有准则：
-
-1.  **参数定义 (Parameter Definition)**:
-    *   **必须遵循**: 参数**必须**在 `__init__` 方法之外，作为类级别的 `params` 字典或元组来定义。这为策略提供了可调整的默认值。
-    *   **动态调整**: 如果需要根据风险偏好等条件动态调整参数，**必须**在 `__init__` 方法的**最开始**，通过修改 `self.p.parameter_name` 的值来完成。
-    *   **禁止模式**: 严禁在 `__init__` 中调用一个独立的辅助函数来定义或返回参数字典。所有参数的修改都应直接作用于 `self.p`。
-    *   **正确示例**:
-      ```python
-      class CustomStrategy(bt.Strategy):
-          params = (('fast_ma', 10), ('slow_ma', 20)) # 默认值
-
-          def __init__(self):
-              # 如果风险偏好是激进型，则覆盖默认值
-              if "{{st.session_state.final_risk_appetite}}" == '激进型':
-                  self.p.fast_ma = 5
-                  self.p.slow_ma = 15
-              
-              # 然后再初始化指标
-              self.fast_ma_ind = bt.ind.SMA(period=self.p.fast_ma)
-              # ...
-      ```
-
-2.  **仓位检查**: 在执行任何 `self.buy()` 操作前，**必须**先通过 `if not self.position:` 或 `if self.position.size == 0:` 来检查当前是否为空仓。
-3.  **数据访问**:
-    *   访问当前K线数据，**必须**使用 `[0]` 索引，例如 `self.data.close[0]`。
-    *   访问上一根K线数据，**必须**使用 `[-1]` 索引，例如 `self.data.close[-1]`。
-4.  **多线指标访问 (最重要)**:
-    *   当使用有多个输出线的指标时（如MACD, 布林带, ADX/DMI等），**必须**通过其 `.lines` 属性来访问具体的线。
-    *   **正确示例**: `self.macd.lines.histo`, `self.bband.lines.top`, `self.adx.lines.adx`, `self.dmi.lines.DIp` (用于DI+), `self.dmi.lines.DIm` (用于DI-)。
-    *   **错误示例**: `self.macd.histo`, `self.bband.top`, `self.dmi.DIplus`。
-5.  **交叉信号**:
-    *   对于“上穿”或“下穿”逻辑，**强烈建议**使用 `backtrader` 内置的 `bt.indicators.CrossOver` 或 `CrossDown` 指标。
-6.  **多步信号状态管理**:
-    *   如果策略逻辑包含多个步骤（例如，“条件A发生后，等待条件B”），**必须**使用实例变量（如 `self.condition_A_met = False`）来跟踪状态。
----
-**【新增核心准则：诊断日志 (Diagnostic Logging)】**
-- **强制要求 (最重要)**: 为了诊断策略为何不交易，您**必须**在 `next` 方法的逻辑判断部分，加入 `print()` 语句来输出关键信息。这是强制性的，如果缺失，任务将被视为失败。
-- **日志内容**:
-    - **每日关键指标 (必须打印)**: 在 `next` 方法的开头，打印当天的日期、收盘价以及策略中用到的所有关键指标的当前值。例如: `print(f"Date: {{self.datas[0].datetime.date(0)}}, Close: {{self.data.close[0]:.2f}}, RSI: {{self.rsi[0]:.2f}}, MACD Hist: {{self.macd.lines.histo[0]:.2f}}")`。
-    - **入场条件判断 (必须打印)**: 在 `if not self.position:` 块内部，计算买入条件后，**必须**打印该条件的最终布尔值结果。例如: `buy_condition = self.rsi[0] < 30 and self.macd.lines.histo[0] > 0`, `print(f"Buy Condition Met: {{buy_condition}}")`。
-- **目的**: 这些日志是分析策略行为的关键，必须无条件包含。
-
----
-**【新增核心准-则：避免逻辑矛盾 (Avoiding Logical Contradictions)】**
-- **问题场景**: 很多策略因为买入条件互相矛盾而从不触发。例如，同时要求`RSI < 30`（超卖，通常发生在下跌趋势中）和`MACD > 0`（上涨趋势确认）。
-- **解决方案**:
-    - **使用“或”逻辑**: 如果有多个独立的买入信号，使用 `or` 连接它们，而不是 `and`。
-    - **设计分步逻辑**: 设计更现实的交易场景，例如“首先等待价格回调（如RSI进入低位），然后在趋势确认后（如MACD金叉）再买入”。这需要使用状态变量（如 `self.waiting_for_confirmation = True`）来管理。
-    - **考虑成交量**: 将成交量放大作为确认信号，可以有效过滤伪信号。
-
----
-**【新增核心准-则：扩展指标库 (Indicator Toolbox)】**
-- **打破局限**: 请不要只使用简单的移动平均线。
-- **强烈建议**: 在设计策略时，从以下列表中选择和组合指标来构建更强大的逻辑：`RSI`, `MACD`, `Stochastic`, `Bollinger Bands`, `ADX`, `Volume`。
-
----
-**【其他重要指令】**
-- 你的所有代码逻辑，特别是参数选择，都必须严格遵循上面指定的【最终风险偏好】。
-- 你的回复**必须**只包含一个Python代码块，以 ```python 开始，并以 ``` 结束。
-- 类名**必须**为 `CustomStrategy`。
-- **不要**包含 `if __name__ == '__main__':` 测试代码块。
-- **必须**在策略的 `__init__` 方法中初始化 `self.daily_values = []`。
-- **必须**在 `next` 方法的末尾处添加 `self.daily_values.append(self.broker.getvalue())`。
-- **除了这个代码块，不要包含任何其他文字**。
-
-请现在开始您的工作。
-"""
-                        else:
-                            # 使用默认的初始策略生成Prompt
-                            prompt = f"""
+                        prompt = f"""
 您是一位顶级的、精通`backtrader`框架的量化策略工程师。您的任务是根据策略摘要和最终风险偏好，编写一个完整的、高质量的、可立即执行的`backtrader`策略文件。
 
-**【最终风险偏好】**: **{st.session_state.final_risk_appetite}**
-
----
-**【极其重要的警告】**
-以下错误是绝对不能犯的，如果您的代码中出现这些错误，将会被严厉批评并要求重新生成：
-1.  **绝对禁止**: 直接访问多线指标的属性，如 `macd.histo`, `bbands.top` 等。
-2.  **必须使用**: 通过 `.lines` 属性访问，如 `macd.lines.histo`, `bbands.lines.top` 等。
+**【最终风险偏好】**: **{{st.session_state.final_risk_appetite}}**
 
 ---
 **【Backtrader 编码核心准则】**
@@ -452,7 +268,7 @@ def render_strategy_backtesting_page(llm_config: dict):
 
           def __init__(self):
               # 如果风险偏好是激进型，则覆盖默认值
-              if "{{st.session_state.final_risk_appetite}}" == '激进型':
+              if "{st.session_state.final_risk_appetite}" == '激进型':
                   self.p.fast_ma = 5
                   self.p.slow_ma = 15
               
@@ -474,6 +290,7 @@ def render_strategy_backtesting_page(llm_config: dict):
 6.  **多步信号状态管理**:
     *   如果策略逻辑包含多个步骤（例如，“条件A发生后，等待条件B”），**必须**使用实例变量（如 `self.condition_A_met = False`）来跟踪状态。
 ---
+
 **【新增核心准则：诊断日志 (Diagnostic Logging)】**
 - **强制要求 (最重要)**: 为了诊断策略为何不交易，您**必须**在 `next` 方法的逻辑判断部分，加入 `print()` 语句来输出关键信息。这是强制性的，如果缺失，任务将被视为失败。
 - **日志内容**:
@@ -506,31 +323,30 @@ def render_strategy_backtesting_page(llm_config: dict):
 
 **要实现的策略摘要:**
 ---
-{st.session_state.report_summary}
+{{st.session_state.report_summary}}
 ---
 
 请现在开始您的工作。
 """
                     else:
-                        # 使用默认的语法错误修复Prompt
                         prompt = f"""
 您上次的代码有语法错误，请修正。原始策略要求和最终风险偏好不变。
 
-**【最终风险偏好】**: **{st.session_state.final_risk_appetite}**
+**【最终风险偏好】**: **{{st.session_state.final_risk_appetite}}**
 
 **【有问题的代码】:**
 ---
-{st.session_state.strategy_code}
+{{st.session_state.strategy_code}}
 ---
 
 **【语法错误】:**
 ---
-{error_message}
+{{error_message}}
 ---
 
 **【原始策略要求】:**
 ---
-{st.session_state.report_summary}
+{{st.session_state.report_summary}}
 ---
 
 ---
@@ -561,7 +377,7 @@ def render_strategy_backtesting_page(llm_config: dict):
 - **除了代码块，不要有任何其他文字**。
 """
 
-                    with st.expander(f"第 {i + 1} 次尝试的AI通信细节 (调试用)", expanded=False):
+                    with st.expander(f"第 {{i + 1}} 次尝试的AI通信细节 (调试用)", expanded=False):
                         st.write("**Prompt Sent to AI:**")
                         st.text(prompt)
                         messages = [HumanMessage(content=prompt)]
@@ -571,14 +387,12 @@ def render_strategy_backtesting_page(llm_config: dict):
                         st.write(result)
 
                     raw_code = extract_python_code(result.content)
-                    print(f"[DEBUG] AI生成的原始代码 (第 {i + 1} 次尝试):\n{raw_code}\n")
                     st.session_state.strategy_code = auto_correct_backtrader_code(raw_code)
-                    print(f"[DEBUG] AI生成并修正后的代码 (第 {i + 1} 次尝试):\n{st.session_state.strategy_code}\n")
-                    st.session_state.thinking_process = "(AI自我修正模式)"
+                    st.session_state.thinking_process = "（AI自我修正模式）"
 
                     try:
                         compile(st.session_state.strategy_code, 'generated_strategy', 'exec')
-                        st.success(f"✅ AI在第 {i + 1} 次尝试后生成了通过语法检查的代码。" )
+                        st.success(f"✅ AI在第 {{i + 1}} 次尝试后生成了通过语法检查的代码。" )
                         
                         symbol_match = re.search(r'(\d+\..+?)_', selected_report) or re.search(r'(.*?)', selected_report)
                         stock_symbol = "UNKNOWN"
@@ -589,11 +403,7 @@ def render_strategy_backtesting_page(llm_config: dict):
                         
                         strategy_dir = project_root / "Strategy"
                         strategy_dir.mkdir(exist_ok=True)
-                        # 根据是否是修复代码，决定文件名后缀
-                        if use_backtest_error_for_fix and backtest_error_for_fix.strip():
-                            strategy_filename = f"strategy_{stock_symbol}_{timestamp}_fixed.py"
-                        else:
-                            strategy_filename = f"strategy_{stock_symbol}_{timestamp}.py"
+                        strategy_filename = f"strategy_{{stock_symbol}}_{{timestamp}}.py"
                         strategy_filepath = strategy_dir / strategy_filename
                         
                         with open(strategy_filepath, 'w', encoding='utf-8') as f:
@@ -601,19 +411,19 @@ def render_strategy_backtesting_page(llm_config: dict):
                         
                         st.session_state.strategy_filepath = str(strategy_filepath)
                         st.session_state.syntax_error = None
-                        st.success(f"代码已成功生成并保存为: `{strategy_filename}`")
+                        st.success(f"代码已成功生成并保存为: `{{strategy_filename}}`")
                         break
 
                     except SyntaxError as e:
                         error_message = str(e)
                         st.session_state.syntax_error = error_message
                         st.session_state.strategy_filepath = None
-                        st.warning(f"第 {i + 1} 次尝试失败: {error_message}")
+                        st.warning(f"第 {{i + 1}} 次尝试失败: {{error_message}}")
                         if i == max_retries - 1:
-                            st.error(f"❌ AI在 {max_retries} 次尝试后仍无法生成语法正确的代码。" )
+                            st.error(f"❌ AI在 {{max_retries}} 次尝试后仍无法生成语法正确的代码。" )
 
             except Exception as e:
-                st.error(f"❌ 生成策略时发生严重错误: {e}")
+                st.error(f"❌ 生成策略时发生严重错误: {{e}}")
                 st.exception(e)
 
     if st.session_state.get('strategy_code'):
@@ -621,7 +431,7 @@ def render_strategy_backtesting_page(llm_config: dict):
         st.code(st.session_state.strategy_code, language='python')
 
         if st.session_state.get('syntax_error'):
-            st.error(f"❌ 最终代码存在语法错误: {st.session_state.syntax_error}")
+            st.error(f"❌ 最终代码存在语法错误: {{st.session_state.syntax_error}}")
         elif st.session_state.get('strategy_filepath'):
             st.success("✅ 代码已成功生成并保存，可以进行回测。" )
 
@@ -683,7 +493,7 @@ def render_strategy_backtesting_page(llm_config: dict):
                 }
 
             except Exception as e:
-                st.error(f"❌ 运行回测时发生错误: {e}")
+                st.error(f"❌ 运行回测时发生错误: {{e}}")
                 st.exception(e)
                 
     # --- 4. 与策略分析师对话 ---
@@ -708,31 +518,14 @@ def render_strategy_backtesting_page(llm_config: dict):
         with chat_container:
             for msg in st.session_state.chat_history:
                 if msg["role"] == "user":
-                    st.markdown(f"**您:** {msg['content']}")
+                    st.markdown(f"**您:** {{msg['content']}}")
                 else:
-                    st.markdown(f"**策略分析师:** {msg['content']}")
+                    st.markdown(f"**策略分析师:** {{msg['content']}}")
         
         # 用户输入框
         with st.form(key="chat_form", clear_on_submit=True):
-            st.markdown("#### 常见问题示例:")
-            st.markdown("""
-            - 请分析当前策略的风险点并提出改进建议
-            - 能否优化止盈止损逻辑以提高收益回撤比？
-            - 如何调整参数以适应不同的市场环境？
-            - 请基于回测结果提出策略改进建议
-            """)
-            
-            user_input = st.text_area("向策略分析师提问或提出修改建议:", key="user_chat_input", height=100)
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                submit_button = st.form_submit_button("发送")
-            with col2:
-                clear_button = st.form_submit_button("清除对话历史")
-            
-            # 处理清除对话历史按钮
-            if clear_button:
-                st.session_state.chat_history = []
-                st.rerun()
+            user_input = st.text_input("向策略分析师提问或提出修改建议:", key="user_chat_input")
+            submit_button = st.form_submit_button("发送")
         
         if submit_button and user_input:
             # 将用户消息添加到对话历史
@@ -743,21 +536,21 @@ def render_strategy_backtesting_page(llm_config: dict):
 您是一位专业的量化策略分析师。用户希望基于以下信息对当前的交易策略进行调整：
 
 **当前策略摘要:**
-{st.session_state.report_summary}
+{{st.session_state.report_summary}}
 
 **当前策略风险偏好:**
-{st.session_state.final_risk_appetite}
+{{st.session_state.final_risk_appetite}}
 
 **当前策略代码:**
 ```python
-{st.session_state.strategy_code}
+{{st.session_state.strategy_code}}
 ```
 
 **最近一次回测结果:**
-{st.session_state.backtest_results["summary"]}
+{{st.session_state.backtest_results["summary"]}}
 
 **用户的具体要求:**
-{user_input}
+{{user_input}}
 
 请根据用户的要求，提供以下信息：
 1. 对用户要求的理解和分析
@@ -781,28 +574,10 @@ def render_strategy_backtesting_page(llm_config: dict):
                     st.rerun()
                     
                 except Exception as e:
-                    st.error(f"❌ 与策略分析师对话时发生错误: {e}")
+                    st.error(f"❌ 与策略分析师对话时发生错误: {{e}}")
                     st.exception(e)
         
-        # 导出对话历史按钮
-        if st.button("导出对话历史"):
-            import json
-            from datetime import datetime
-            
-            # 创建对话历史的文本格式
-            chat_history_text = "# 策略分析师对话历史\n\n"
-            chat_history_text += f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            
-            for msg in st.session_state.chat_history:
-                if msg["role"] == "user":
-                    chat_history_text += f"## 您:\n{msg['content']}\n\n"
-                else:
-                    chat_history_text += f"## 策略分析师:\n{msg['content']}\n\n"
-            
-            # 提供下载链接
-            st.download_button(
-                label="下载对话历史",
-                data=chat_history_text,
-                file_name=f"strategy_chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                mime="text/markdown"
-            )
+        # 清除对话历史按钮
+        if st.button("清除对话历史"):
+            st.session_state.chat_history = []
+            st.rerun()

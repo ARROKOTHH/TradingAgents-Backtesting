@@ -21,97 +21,31 @@ def auto_correct_backtrader_code(code: str) -> str:
     """
     自动修正Backtrader代码中常见的.lines属性访问错误。
     """
-    import re
-    
-    # 添加调试信息
-    print("[DEBUG] 开始自动修正Backtrader代码...")
-    print("[DEBUG] 修正前的代码:")
-    print(code)
-    print("")
-    
-    # 定义指标类名，用于识别指标初始化语句
-    indicator_classes = [
-        'SimpleMovingAverage', 'ExponentialMovingAverage', 'RSI', 'MACD', 
-        'BollingerBands', 'AverageTrueRange', 'Stochastic', 'ADX', 'DMI',
-        'CrossOver', 'CrossDown'
+    # 规则：(错误模式, 正确模式)
+    # 使用正则表达式确保只替换属性访问，避免替换字符串内容
+    correction_rules = [
+        (r'(\.histo)', r'.lines.histo'),
+        (r'(\.DIp)', r'.lines.DIp'),
+        (r'(\.DIm)', r'.lines.DIm'),
+        (r'(\.DIplus)', r'.lines.DIp'),
+        (r'(\.DIminus)', r'.lines.DIm'),
+        (r'(\.adx)', r'.lines.adx'),
+        (r'(\.top)', r'.lines.top'),
+        (r'(\.mid)', r'.lines.mid'),
+        (r'(\.bot)', r'.lines.bot'),
+        (r'(\.signal)', r'.lines.signal'),
+        (r'(\.macd)', r'.lines.macd'),
     ]
     
-    # 构建正则表达式模式来匹配指标初始化语句
-    indicator_class_pattern = '|'.join(indicator_classes)
-    # 转义特殊字符以避免正则表达式错误
-    assignment_pattern = re.compile(
-        r'(\w+)\s*=\s*bt\.indicators\.(' + indicator_class_pattern + r')\s*\('
-    )
-    
-    # 找到所有指标变量名
-    indicator_vars = set()
-    for match in assignment_pattern.finditer(code):
-        var_name = match.group(1)
-        indicator_vars.add(var_name)
-    
-    print(f"[DEBUG] 识别到的指标变量名: {indicator_vars}")
-    
-    # 新增：修正AI错误的指标初始化方式
-    # 例如：self.rsi.lines.rsi = bt.indicators.RSI(...) -> self.rsi = bt.indicators.RSI(...)
-    wrong_init_rules = []
-    for var_name in indicator_vars:
-        # 错误的初始化方式：self.var.lines.var = bt.indicators.Indicator(...)
-        wrong_init_rules.append((
-            rf'self\.{var_name}\.lines\.{var_name}\s*=\s*bt\.indicators\.',
-            f'self.{var_name} = bt.indicators.'
-        ))
-    
-    # 定义需要修正的属性访问模式
-    # 只修正那些明确是指标变量的属性访问
-    correction_rules = []
-    for var_name in indicator_vars:
-        # 修正 .histo, .rsi, .atr 等属性访问
-        correction_rules.append((rf'\b{var_name}\.histo\b', f'{var_name}.lines.histo'))
-        correction_rules.append((rf'\b{var_name}\.macd\b', f'{var_name}.lines.macd'))
-        correction_rules.append((rf'\b{var_name}\.signal\b', f'{var_name}.lines.signal'))
-        correction_rules.append((rf'\b{var_name}\.DIp\b', f'{var_name}.lines.DIp'))
-        correction_rules.append((rf'\b{var_name}\.DIm\b', f'{var_name}.lines.DIm'))
-        correction_rules.append((rf'\b{var_name}\.adx\b', f'{var_name}.lines.adx'))
-        correction_rules.append((rf'\b{var_name}\.top\b', f'{var_name}.lines.top'))
-        correction_rules.append((rf'\b{var_name}\.mid\b', f'{var_name}.lines.mid'))
-        correction_rules.append((rf'\b{var_name}\.bot\b', f'{var_name}.lines.bot'))
-        correction_rules.append((rf'\b{var_name}\.rsi\b', f'{var_name}.lines.rsi'))
-        correction_rules.append((rf'\b{var_name}\.percK\b', f'{var_name}.lines.percK'))
-        correction_rules.append((rf'\b{var_name}\.percD\b', f'{var_name}.lines.percD'))
-        correction_rules.append((rf'\b{var_name}\.atr\b', f'{var_name}.lines.atr'))
-        correction_rules.append((rf'\b{var_name}\.sma\b', f'{var_name}.lines.sma'))
-        correction_rules.append((rf'\b{var_name}\.ema\b', f'{var_name}.lines.ema'))
-    
-    # 合并规则，特定变量的规则优先
-    all_rules = wrong_init_rules + correction_rules
-    
     corrected_code = code
-    modifications_made = []
-    
-    for pattern, replacement in all_rules:
-        # 记录替换前的代码
-        original_code = corrected_code
+    for pattern, replacement in correction_rules:
+        # 使用负向先行断言来避免重复替换, e.g., .lines.histo
+        regex = r'(?<!\.lines)' + pattern
+        corrected_code = re.sub(regex, replacement, corrected_code)
         
-        # 应用替换
-        corrected_code = re.sub(pattern, replacement, corrected_code)
-        
-        # 如果代码发生了变化，记录下来
-        if original_code != corrected_code:
-            modifications_made.append(f"应用规则: {pattern} -> {replacement}")
-    
-    print("[DEBUG] 自动修正完成。")
-    if modifications_made:
-        print("[DEBUG] 执行的修正操作:")
-        for mod in modifications_made:
-            print("  - " + mod)
-        print("[DEBUG] 修正后的代码:")
-        print(corrected_code)
-        print("")
-    else:
-        print("[DEBUG] 未发现需要修正的内容。")
-        print("")
-        
-    return corrected_codedef get_llm_instance(llm_config: dict):
+    return corrected_code
+
+def get_llm_instance(llm_config: dict):
     """根据传入的完整LLM配置，创建并返回一个LLM实例"""
     provider = llm_config.get("llm_provider")
     # 优先使用深度思考模型，如果不存在则使用快速思考模型
@@ -210,6 +144,7 @@ def render_strategy_backtesting_page(llm_config: dict):
 2.  **信息源黑名单**: 您 **必须完全忽略** 报告中所有后续的、包含二次解读和多方辩论的模块，包括但不限于：
     *   风险评估（所有风险分析师的观点）
     *   研究团队决策（多头/空头研究员的辩论）
+    *   交易团队计划
     *   风险管理团队决策
 3.  **决策主导思想**: 以【投资决策摘要】中的“投资建议”（如‘买入’、‘持有’）作为您构建策略的**核心指导方向**（即，构建一个做多策略、中性策略还是规避策略）。您的角色是基于原始分析，为这个大方向设计出最合理的量化执行方案。
 
@@ -345,17 +280,6 @@ def render_strategy_backtesting_page(llm_config: dict):
 ---
 
 ---
-**【极其重要的警告】**
-以下错误是绝对不能犯的，如果您的代码中出现这些错误，将会被严厉批评并要求重新生成：
-1.  **绝对禁止**: 直接访问多线指标的属性，如 `macd.histo`, `bbands.top` 等。
-2.  **必须使用**: 通过 `.lines` 属性访问，如 `macd.lines.histo`, `bbands.lines.top` 等。
-
-**【强制修复指令】**
-请仔细检查代码中所有对 `backtrader` 指标属性的访问。对于像 `MACD`, `BollingerBands`, `ADX` 这样的多线指标，必须使用 `.lines` 属性来访问其子线。
-- 错误示例: `self.macd.histo`, `self.bband.top`, `self.dmi.DIplus`
-- 正确示例: `self.macd.lines.histo`, `self.bband.lines.top`, `self.dmi.lines.DIp`
-
----
 **【Backtrader 编码核心准则】**
 请再次检查您的代码，确保它严格遵守了以下所有准则：
 
@@ -430,12 +354,6 @@ def render_strategy_backtesting_page(llm_config: dict):
 您是一位顶级的、精通`backtrader`框架的量化策略工程师。您的任务是根据策略摘要和最终风险偏好，编写一个完整的、高质量的、可立即执行的`backtrader`策略文件。
 
 **【最终风险偏好】**: **{st.session_state.final_risk_appetite}**
-
----
-**【极其重要的警告】**
-以下错误是绝对不能犯的，如果您的代码中出现这些错误，将会被严厉批评并要求重新生成：
-1.  **绝对禁止**: 直接访问多线指标的属性，如 `macd.histo`, `bbands.top` 等。
-2.  **必须使用**: 通过 `.lines` 属性访问，如 `macd.lines.histo`, `bbands.lines.top` 等。
 
 ---
 **【Backtrader 编码核心准则】**
@@ -571,9 +489,7 @@ def render_strategy_backtesting_page(llm_config: dict):
                         st.write(result)
 
                     raw_code = extract_python_code(result.content)
-                    print(f"[DEBUG] AI生成的原始代码 (第 {i + 1} 次尝试):\n{raw_code}\n")
                     st.session_state.strategy_code = auto_correct_backtrader_code(raw_code)
-                    print(f"[DEBUG] AI生成并修正后的代码 (第 {i + 1} 次尝试):\n{st.session_state.strategy_code}\n")
                     st.session_state.thinking_process = "(AI自我修正模式)"
 
                     try:
@@ -714,25 +630,8 @@ def render_strategy_backtesting_page(llm_config: dict):
         
         # 用户输入框
         with st.form(key="chat_form", clear_on_submit=True):
-            st.markdown("#### 常见问题示例:")
-            st.markdown("""
-            - 请分析当前策略的风险点并提出改进建议
-            - 能否优化止盈止损逻辑以提高收益回撤比？
-            - 如何调整参数以适应不同的市场环境？
-            - 请基于回测结果提出策略改进建议
-            """)
-            
-            user_input = st.text_area("向策略分析师提问或提出修改建议:", key="user_chat_input", height=100)
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                submit_button = st.form_submit_button("发送")
-            with col2:
-                clear_button = st.form_submit_button("清除对话历史")
-            
-            # 处理清除对话历史按钮
-            if clear_button:
-                st.session_state.chat_history = []
-                st.rerun()
+            user_input = st.text_input("向策略分析师提问或提出修改建议:", key="user_chat_input")
+            submit_button = st.form_submit_button("发送")
         
         if submit_button and user_input:
             # 将用户消息添加到对话历史
@@ -784,25 +683,7 @@ def render_strategy_backtesting_page(llm_config: dict):
                     st.error(f"❌ 与策略分析师对话时发生错误: {e}")
                     st.exception(e)
         
-        # 导出对话历史按钮
-        if st.button("导出对话历史"):
-            import json
-            from datetime import datetime
-            
-            # 创建对话历史的文本格式
-            chat_history_text = "# 策略分析师对话历史\n\n"
-            chat_history_text += f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-            
-            for msg in st.session_state.chat_history:
-                if msg["role"] == "user":
-                    chat_history_text += f"## 您:\n{msg['content']}\n\n"
-                else:
-                    chat_history_text += f"## 策略分析师:\n{msg['content']}\n\n"
-            
-            # 提供下载链接
-            st.download_button(
-                label="下载对话历史",
-                data=chat_history_text,
-                file_name=f"strategy_chat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
-                mime="text/markdown"
-            )
+        # 清除对话历史按钮
+        if st.button("清除对话历史"):
+            st.session_state.chat_history = []
+            st.rerun()

@@ -178,5 +178,15 @@
     "cost": 0.006,
     "session_id": "analysis_7b9070aa_20250914_185108",
     "analysis_type": "A股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T20:49:35.868374",
+    "provider": "google",
+    "model_name": "gemini-2.5-pro",
+    "input_tokens": 12000,
+    "output_tokens": 6000,
+    "cost": 0.006,
+    "session_id": "analysis_dad8ebf8_20250914_204727",
+    "analysis_type": "A股_analysis"
   }
 ]
