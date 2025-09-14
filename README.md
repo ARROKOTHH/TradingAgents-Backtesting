@@ -56,45 +56,32 @@ Then, edit the `.env` file to add your LLM API keys and other required configura
 
 ---
 
-## 🚀 Quick Start
+### 🚀 Quick Start
 
 You can run the project via the Web UI or the CLI.
 
-### Starting the Web UI
+#Starting the Web UI
 
 Execute the following command to launch the graphical interface:
-
+For web UI
 ```bash
-# Using the provided scripts is recommended
-# On Windows
-start_web.bat
-
-# On macOS/Linux
-bash start_web.sh
-
-# Alternatively, run directly
-python start_web.py
+streamlit run web/app.py
 ```
-
 After launching, open `http://localhost:8501` in your browser to get started.
 
-### Starting the CLI
-
+#Starting the CLI
 Execute the following command to launch the command-line interface:
-
 ```bash
 python cli/main.py
 ```
-
-You can view all available commands and options using the `--help` flag:
-
+#You can view all available commands and options using the `--help` flag:
 ```bash
 python cli/main.py --help
 ```
 
 ---
 
-## 🐳 Docker Deployment
+## 🐳 Docker Deployment (Recommend)
 
 If you prefer to run the application using Docker, a `docker-compose.yml` file is provided.
 
@@ -114,7 +101,16 @@ docker-compose logs -f
 ```
 
 ---
+## 🚮 Clean the project cache
+ ```bash
+# On windows
+run /clean_project_for_Win.bat
 
+#On MacOS/Linux
+chmod +x /clean_project.sh
+/clean_project.sh
+```
+---
 ## 📁 Project Structure Overview
 
 ```
