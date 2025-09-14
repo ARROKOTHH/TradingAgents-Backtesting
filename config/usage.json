@@ -1,0 +1,182 @@
+[
+  {
+    "timestamp": "2025-09-08T19:56:04.297853",
+    "provider": "google",
+    "model_name": "gemini-2.5-pro",
+    "input_tokens": 16000,
+    "output_tokens": 8000,
+    "cost": 0.008,
+    "session_id": "analysis_d93daaeb_20250908_195136",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-08T20:07:51.655705",
+    "provider": "google",
+    "model_name": "gemini-2.5-pro",
+    "input_tokens": 16000,
+    "output_tokens": 8000,
+    "cost": 0.008,
+    "session_id": "analysis_186b694d_20250908_200329",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-08T20:16:51.828626",
+    "provider": "google",
+    "model_name": "gemini-2.5-pro",
+    "input_tokens": 16000,
+    "output_tokens": 8000,
+    "cost": 0.008,
+    "session_id": "analysis_82148c15_20250908_201243",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-08T20:28:50.963074",
+    "provider": "google",
+    "model_name": "gemini-2.5-pro",
+    "input_tokens": 16000,
+    "output_tokens": 8000,
+    "cost": 0.008,
+    "session_id": "analysis_cedd43e3_20250908_202434",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-08T20:37:00.270538",
+    "provider": "google",
+    "model_name": "gemini-2.5-pro",
+    "input_tokens": 16000,
+    "output_tokens": 8000,
+    "cost": 0.008,
+    "session_id": "analysis_250eb41f_20250908_203255",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-10T21:21:13.463801",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 16000,
+    "output_tokens": 8000,
+    "cost": 0.008,
+    "session_id": "analysis_358c88ad_20250910_211829",
+    "analysis_type": "A股_analysis"
+  },
+  {
+    "timestamp": "2025-09-10T21:31:47.612012",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 16000,
+    "output_tokens": 8000,
+    "cost": 0.008,
+    "session_id": "analysis_c5f09f3c_20250910_212913",
+    "analysis_type": "A股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T16:59:08.692161",
+    "provider": "google",
+    "model_name": "gemini-2.5-pro",
+    "input_tokens": 4000,
+    "output_tokens": 2000,
+    "cost": 0.002,
+    "session_id": "analysis_31f36803_20250914_165732",
+    "analysis_type": "A股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T17:24:35.783027",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 12000,
+    "output_tokens": 6000,
+    "cost": 0.006,
+    "session_id": "analysis_49a2878d_20250914_172200",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T17:29:02.168593",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 8000,
+    "output_tokens": 4000,
+    "cost": 0.004,
+    "session_id": "analysis_bf5bc0a4_20250914_172642",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T17:40:42.344154",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 8000,
+    "output_tokens": 4000,
+    "cost": 0.004,
+    "session_id": "analysis_2b7b3fc7_20250914_173816",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T17:46:07.385568",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 12000,
+    "output_tokens": 6000,
+    "cost": 0.006,
+    "session_id": "analysis_3fb7b978_20250914_174400",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T18:08:51.178930",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 12000,
+    "output_tokens": 6000,
+    "cost": 0.006,
+    "session_id": "analysis_b9e4f2e1_20250914_180530",
+    "analysis_type": "美股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T18:41:07.778082",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 12000,
+    "output_tokens": 6000,
+    "cost": 0.006,
+    "session_id": "analysis_fc721fa7_20250914_183915",
+    "analysis_type": "A股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T18:45:29.519776",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 12000,
+    "output_tokens": 6000,
+    "cost": 0.006,
+    "session_id": "analysis_0dfbaec9_20250914_184344",
+    "analysis_type": "A股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T18:47:51.190073",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 12000,
+    "output_tokens": 6000,
+    "cost": 0.006,
+    "session_id": "analysis_4801e8c0_20250914_184555",
+    "analysis_type": "A股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T18:50:27.932136",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 12000,
+    "output_tokens": 6000,
+    "cost": 0.006,
+    "session_id": "analysis_9467b50b_20250914_184835",
+    "analysis_type": "A股_analysis"
+  },
+  {
+    "timestamp": "2025-09-14T18:52:56.597193",
+    "provider": "google",
+    "model_name": "gemini-1.5-pro",
+    "input_tokens": 12000,
+    "output_tokens": 6000,
+    "cost": 0.006,
+    "session_id": "analysis_7b9070aa_20250914_185108",
+    "analysis_type": "A股_analysis"
+  }
+]
