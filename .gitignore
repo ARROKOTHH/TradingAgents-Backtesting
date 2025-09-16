@@ -1,2 +1,8 @@
 analysis reports/
 personal files/
+start.bat
+startgemini.bat
+logs/
+results/
+.env
+test/

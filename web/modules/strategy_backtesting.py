@@ -111,7 +111,9 @@ def auto_correct_backtrader_code(code: str) -> str:
         print("[DEBUG] 未发现需要修正的内容。")
         print("")
         
-    return corrected_codedef get_llm_instance(llm_config: dict):
+    return corrected_code
+
+def get_llm_instance(llm_config: dict):
     """根据传入的完整LLM配置，创建并返回一个LLM实例"""
     provider = llm_config.get("llm_provider")
     # 优先使用深度思考模型，如果不存在则使用快速思考模型
@@ -787,11 +789,11 @@ def render_strategy_backtesting_page(llm_config: dict):
         # 导出对话历史按钮
         if st.button("导出对话历史"):
             import json
-            from datetime import datetime
+            import datetime as dt
             
             # 创建对话历史的文本格式
             chat_history_text = "# 策略分析师对话历史\n\n"
-            chat_history_text += f"导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            chat_history_text += f"导出时间: {dt.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             
             for msg in st.session_state.chat_history:
                 if msg["role"] == "user":

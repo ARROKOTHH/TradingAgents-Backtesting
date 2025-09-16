@@ -276,15 +276,7 @@ class TradingAgentsGraph:
                     self.toolkit.get_reddit_stock_info,
                 ]
             ),
-            "news": ToolNode(
-                [
-                    # online tools
-                    self.toolkit.get_google_news,
-                    # offline tools
-                    self.toolkit.get_finnhub_news,
-                    self.toolkit.get_reddit_news,
-                ]
-            ),
+            "news": ToolNode([self.toolkit.get_stock_news_unified]),
             "fundamentals": ToolNode([self.toolkit.get_stock_fundamentals_unified]),
         }
 

@@ -223,20 +223,75 @@ class AKShareProvider:
             logger.error(f"❌ AKShare获取{symbol}港股财务数据失败: {e}")
             return {}
 
-    def get_china_financial_indicators(self, symbol: str) -> Optional[pd.DataFrame]:
-        """获取A股核心财务指标"""
+    def _get_china_valuation_indicators(self, symbol: str) -> Optional[pd.DataFrame]:
+        """获取A股的实时估值指标，如PE, PB, 总市值等"""
         if not self.connected: return None
         try:
-            logger.info(f"🔍 开始获取 {symbol} 的A股核心财务指标 (从2024年开始)...")
-            # 使用 stock_financial_analysis_indicator 获取数据
+            logger.info(f"🔍 开始获取 {symbol} 的A股实时估值指标...")
+            # 获取所有A股的实时行情数据
+            spot_df = self.ak.stock_zh_a_spot_em()
+            if spot_df is None or spot_df.empty:
+                logger.warning(f"⚠️ AKShare未能获取A股实时行情数据。")
+                return None
+            
+            # 筛选出目标股票
+            stock_valuation = spot_df[spot_df['代码'] == symbol]
+            
+            if stock_valuation.empty:
+                logger.warning(f"⚠️ 在A股实时行情中未找到 {symbol} 的估值数据。")
+                return None
+
+            # 提取并重命名关键估值指标
+            valuation_metrics = stock_valuation[[
+                '市盈率-动态', '市净率', '总市值', '流通市值'
+            ]].copy()
+            valuation_metrics.rename(columns={
+                '市盈率-动态': 'PE(动态)',
+                '市净率': 'PB',
+                '总市值': '总市值(元)',
+                '流通市值': '流通市值(元)'
+            }, inplace=True)
+            
+            logger.info(f"✅ 成功获取 {symbol} 的估值指标。")
+            return valuation_metrics
+
+        except Exception as e:
+            logger.error(f"❌ AKShare获取 {symbol} 估值指标数据失败: {e}")
+            return None
+
+    def get_china_financial_indicators(self, symbol: str) -> Optional[pd.DataFrame]:
+        """获取A股核心财务指标和估值指标"""
+        if not self.connected: return None
+        try:
+            logger.info(f"🔍 开始获取 {symbol} 的A股核心财务与估值指标 (从2024年开始)...")
+            
+            # 1. 获取财务分析指标
             financial_df = self.ak.stock_financial_analysis_indicator(symbol=symbol, start_year="2024")
             if financial_df is None or financial_df.empty:
-                logger.warning(f"⚠️ AKShare未能获取 {symbol} 的财务指标数据。")
-                return None
-            logger.info(f"✅ 成功获取 {symbol} 的财务指标数据。")
+                logger.warning(f"⚠️ AKShare未能获取 {symbol} 的财务分析指标数据。")
+                # 即使财务指标失败，我们仍然尝试获取估值指标
+                return self._get_china_valuation_indicators(symbol)
+
+            # 2. 获取估值指标
+            valuation_df = self._get_china_valuation_indicators(symbol)
+
+            # 3. 合并数据
+            if valuation_df is not None and not valuation_df.empty:
+                logger.info(f"🔄 正在合并 {symbol} 的财务指标和估值指标...")
+                # 重置估值df的索引，以便与财务df的每一行进行合并
+                valuation_values = valuation_df.iloc[0].to_dict()
+                
+                # 将估值指标的单个值赋给财务指标df的每一行
+                for col, value in valuation_values.items():
+                    financial_df[col] = value
+                
+                logger.info(f"✅ 成功合并指标。")
+
+            logger.info(f"✅ 成功获取 {symbol} 的财务与估值综合指标。")
             return financial_df
+            
         except Exception as e:
-            logger.error(f"❌ AKShare获取 {symbol} 财务指标数据失败: {e}")
+            logger.error(f"❌ AKShare获取 {symbol} 综合指标数据失败: {e}")
             return None
 
     def get_china_stock_news(self, symbol: str) -> Optional[pd.DataFrame]:
@@ -254,8 +309,15 @@ class AKShareProvider:
             logger.error(f"❌ AKShare获取 {symbol} 新闻数据失败: {e}")
             return None
 
+# 全局单例
+_akshare_provider_instance = None
+
 def get_akshare_provider() -> AKShareProvider:
-    """获取AKShare提供器实例"""
-    return AKShareProvider()
+    """获取AKShareProvider的单例实例"""
+    global _akshare_provider_instance
+    if _akshare_provider_instance is None:
+        logger.info("🔧 [单例模式] 初始化全局AKShareProvider实例...")
+        _akshare_provider_instance = AKShareProvider()
+    return _akshare_provider_instance
 
 # ... (rest of the file remains the same)

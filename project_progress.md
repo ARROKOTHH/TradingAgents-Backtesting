@@ -44,7 +44,7 @@
 ---
 ---
 
-## 工作日志 - 2025年9月15日
+## 工作日志 - 2025年9月14日
 
 *   **项目管理：仓库迁移与重新初始化**
     *   **背景**: 项目原为fork而来，包含了大量无关的git历史记录。为了作为一个独立的全新项目发布，需要清理历史。
@@ -62,7 +62,7 @@
 ---
 ---
 
-## 工作日志 - 2025年9月14日
+## 工作日志 - 2025年9月15日
 
 *   **修复 auto_correct_backtrader_code 函数中的正则表达式错误**
     *   **背景**: 在测试过程中发现 `auto_correct_backtrader_code` 函数存在正则表达式语法错误，导致程序崩溃。
@@ -86,3 +86,56 @@
         *   例如：`self.rsi.lines.rsi = bt.indicators.RSI(...)` -> `self.rsi = bt.indicators.RSI(...)`
         *   同时修正了错误的属性访问方式：`self.rsi.rsi[0]` -> `self.rsi.lines.rsi[0]`
         *   优化了正则表达式规则，确保修正的准确性和全面性
+
+---
+
+## 工作日志 - 2025年9月16日
+
+*   **增强基本面分析工具以包含估值指标**
+    *   **目标:** 为A股的基本面分析增加市盈率(PE)、市净率(PB)和市值等关键估值指标。
+    *   **修改文件:** `tradingagents/dataflows/akshare_utils.py`
+    *   **具体实现:**
+        *   新增私有方法 `_get_china_valuation_indicators`，通过调用 `akshare.stock_zh_a_spot_em()` 接口获取A股全市场的实时行情数据，并从中筛选出目标股票的估值信息。
+        *   重写核心方法 `get_china_financial_indicators`，实现了将 `stock_financial_analysis_indicator`（财务指标）和新增的估值指标数据进行合并，最终返回一个包含两种信息的DataFrame。
+
+*   **优化基本面分析师的提示以利用新数据**
+    *   **目标:** 指导基本面分析师Agent理解并使用新增的估值指标。
+    *   **修改文件:** `tradingagents/agents/analysts/fundamentals_analyst.py`
+    *   **具体实现:**
+        *   修改了`fundamentals_analyst_node`函数中的系统提示（System Prompt）构建逻辑。
+        *   在`analysis_reqs`分析要求列表中，为A股增加了明确的“估值分析”步骤，并具体列出`PE(动态)`、`PB(市净率)`、`总市值`等指标，引导LLM在生成报告时必须包含对这些新数据的解读。
+
+*   **修复技术指标工具的稳定性问题**
+    *   **目标:** 解决技术指标工具因反复初始化导致的计算失败或不稳定问题。
+    *   **修改文件:** `tradingagents/dataflows/akshare_utils.py`
+    *   **具体实现:**
+        *   将 `get_akshare_provider` 函数重构为单例（Singleton）模式。
+        *   通过引入一个全局变量 `_akshare_provider_instance` 作为缓存，确保 `AKShareProvider` 类在整个应用生命周期中只被实例化一次，解决了资源消耗和潜在的并发问题。
+
+---
+
+## 工作日志 - 2025年9月16日 (晚间)
+
+本次工作聚焦于解决技术分析师和新闻分析师的数据源问题，确保Agent能够获取到正确、可靠的数据。
+
+*   **修复技术分析师无法获取技术指标的问题**
+    *   **问题诊断**: 经排查，`Market Analyst`（市场分析师）调用的 `get_stock_market_data_unified` 工具仅返回了基础的K线数据，并未计算任何技术指标（如MACD, RSI等），导致其无法进行有效的技术分析。
+    *   **解决方案**:
+        *   **修改文件**: `tradingagents/agents/utils/agent_utils.py`
+        *   **修改函数**: `get_stock_market_data_unified`
+        *   **具体实现**: 在该函数获取A股K线数据后，立即调用 `get_china_stock_indicators` 函数，将计算出的技术指标（MACD, RSI, KDJ等）格式化为JSON字符串，并一并添加到返回结果中。这确保了技术分析师能获得充足的分析“弹药”。
+
+*   **重构并修复新闻分析师的数据获取逻辑**
+    *   **问题诊断**:
+        1.  **代码定位错误**: 初步修改了 `agent_utils.py` 中的新闻工具，但通过日志发现，当使用Google模型时，程序实际调用的是 `tradingagents/tools/unified_news_tool.py`，导致初步修改无效。
+        2.  **数据接口错误**: 在定位到正确的文件后，发现主数据源 `akshare` 获取新闻时发生 `KeyError: "['新闻来源'] not in index"` 错误，原因是接口返回的列名已从“新闻来源”变更为“文章来源”。
+    *   **解决方案**:
+        1.  **修正执行文件**: 放弃修改 `agent_utils.py`，将全部逻辑集中到 `tradingagents/tools/unified_news_tool.py` 中。
+        2.  **重构核心逻辑**:
+            *   **修改文件**: `tradingagents/tools/unified_news_tool.py`
+            *   **修改内容**: 重写了 `UnifiedNewsAnalyzer` 类，为所有市场（A股、港股、美股）统一实现了“**Akshare优先，Google News备用**”的数据获取策略，大大增强了新闻获取的稳定性和代码的清晰度。
+        3.  **修复接口错误**:
+            *   **修改文件**: `tradingagents/dataflows/interface.py`
+            *   **修改函数**: `get_akshare_stock_news_unified`
+            *   **具体实现**: 将代码中引用的列名从 `'新闻来源'` 修正为 `'文章来源'`，解决了因接口变更导致的程序崩溃问题。
+    *   **过程管理**: 在修复过程中，由于误操作污染了 `agent_utils.py` 文件，最终通过备份还原并精确重现修改的方式，保证了代码库的干净和正确。

@@ -188,7 +188,7 @@ def get_akshare_stock_news_unified(symbol: str) -> str:
         news_df = provider.get_china_stock_news(symbol) # 底层函数名暂时不变
         if news_df is not None and not news_df.empty:
             # 筛选并格式化对LLM有用的列
-            news_df_filtered = news_df[['新闻标题', '新闻内容', '发布时间', '新闻来源']]
+            news_df_filtered = news_df[['新闻标题', '新闻内容', '发布时间', '文章来源']]
             return news_df_filtered.to_string()
         else:
             return f"❌ 未能获取 {symbol} 的新闻数据。"
