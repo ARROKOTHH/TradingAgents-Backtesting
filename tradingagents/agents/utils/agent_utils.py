@@ -8,6 +8,7 @@ from datetime import date, timedelta, datetime
 import functools
 import pandas as pd
 import os
+import json
 from dateutil.relativedelta import relativedelta
 from langchain_openai import ChatOpenAI
 import tradingagents.dataflows.interface as interface
@@ -310,6 +311,19 @@ class Toolkit:
                 try:
                     china_data = get_china_stock_data_unified(ticker, start_date, end_date)
                     result_data.append(f"## A股市场数据\n{china_data}")
+                    
+                    # 获取并附加技术指标
+                    try:
+                        logger.info(f"📈 [统一市场工具] 计算A股技术指标...")
+                        indicators = get_china_stock_indicators(ticker, end_date)
+                        # 使用json.dumps美化输出，确保LLM能更好地解析
+                        indicators_str = json.dumps(indicators, indent=2, ensure_ascii=False)
+                        result_data.append(f"## A股技术指标\n```json\n{indicators_str}\n```")
+                        logger.info(f"✅ [统一市场工具] 已成功附加技术指标ảng。")
+                    except Exception as e:
+                        logger.warning(f"⚠️ [统一市场工具] 计算技术指标失败: {e}")
+                        result_data.append(f"## A股技术指标\n获取失败: {e}")
+
                 except Exception as e:
                     result_data.append(f"## A股市场数据\n获取失败: {e}")
 
